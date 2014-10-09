@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::c_str::CString;
 use std::vec::raw::from_buf;
 use std::path::BytesContainer;
+use std::ptr::null;
+use std::c_vec::CVec;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
@@ -20,6 +22,9 @@ enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
     HyperFloat(f64),
+    HyperListString(Vec<Vec<u8>>),
+    HyperListInt(Vec<i64>),
+    HyperListFloat(Vec<f64>),
 }
 
 type Attributes = HashMap<String, HyperValue>;
@@ -50,6 +55,7 @@ struct Request {
     confirm_tx: Sender<bool>,
 }
 
+#[deriving(Clone)]
 struct InnerClient {
     ptr: *mut Struct_hyperdex_client,
     ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
@@ -58,6 +64,13 @@ struct InnerClient {
 
 unsafe fn to_bytes(ptr: *const ::libc::c_char) -> Vec<u8> {
     CString::new(ptr, true).container_into_owned_bytes()
+}
+
+unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8> {
+    let cvec = CVec::new(ptr as *mut u8, len as uint);
+    let mut vec = Vec::with_capacity(len as uint);
+    vec.push_all(cvec.as_slice());
+    return vec;
 }
 
 unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
@@ -89,6 +102,25 @@ unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_
                     return Err("Server sent a malformed float".into_string());
                 }
                 attrs.insert(name, HyperFloat(cdouble));
+            },
+            HYPERDATATYPE_LIST_STRING => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_LIST_STRING,
+                                          attr.value, attr.value_sz);
+                let mut lst = Vec::new();
+                loop {
+                    let mut cstr = null();
+                    let mut cstr_sz = 0;
+                    let status = hyperdex_ds_iterate_list_string_next(&mut citer, &mut cstr, &mut cstr_sz);
+                    if status > 0 {
+                        lst.push(to_bytes_with_len(cstr, cstr_sz));
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted list of strings".into_string());
+                    } else {
+                        break;
+                    }
+                }
+                attrs.insert(name, HyperListString(lst));
             },
             _ => return Err(format!("Wrong datatype: {}", attr.datatype)),
         }
@@ -146,7 +178,7 @@ impl InnerClient {
 }
 
 pub struct Client {
-    ops_maps: Vec<Arc<Mutex<HashMap<int64_t, HyperState>>>>
+    inner_clients: Vec<InnerClient>
 }
 
 impl Client {
@@ -157,7 +189,7 @@ impl Client {
 
         let (err_tx, err_rx) = channel();
 
-        let mut ops_maps = Vec::new();
+        let mut inner_clients = Vec::new();
         for _ in range(0, num_cpus()) {
             let ptr = unsafe { hyperdex_client_create(ip, port) };
             if ptr.is_null() {
@@ -169,15 +201,16 @@ impl Client {
                     ops: ops.clone(),
                     err_tx: err_tx.clone(),
                 };
+                let mut ic_clone = inner_client.clone();
                 spawn(proc() {
-                    inner_client.run_forever();
+                    ic_clone.run_forever();
                 });
-                ops_maps.push(ops);
+                inner_clients.push(inner_client);
             }
         };
 
         Ok(Client {
-            ops_maps: ops_maps
+            inner_clients: inner_clients
         })
     }
 
