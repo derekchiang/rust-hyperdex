@@ -2,12 +2,13 @@ use std::io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
 use std::comm::{Empty, Disconnected};
 use std::ptr::null_mut;
-use std::collections::HashMap;
+use std::collections::{HashMap, TreeSet};
 use std::c_str::CString;
 use std::vec::raw::from_buf;
 use std::path::BytesContainer;
 use std::ptr::null;
 use std::c_vec::CVec;
+use std::mem::transmute;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
@@ -18,13 +19,59 @@ use hyperdex::*;
 use hyperdex_client::*;
 use hyperdex_datastructures::*;
 
+/// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
+/// by wrapping them in a struct and implement those traits
+struct F64 {
+    value: f64,
+}
+
+impl PartialEq for F64 {
+    fn eq(&self, other: &F64) -> bool {
+        if self.value == other.value {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl PartialOrd for F64 {
+    fn partial_cmp(&self, other: &F64) -> Option<Ordering> {
+        // Kinda hacky, but I think this should work...
+        if self.value > other.value {
+            Some(Greater)
+        } else if self.value < other.value {
+            Some(Less)
+        } else {
+            Some(Equal)
+        }
+    }
+}
+
+impl Eq for F64 {}
+
+impl Ord for F64 {
+    fn cmp(&self, other: &F64) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
     HyperFloat(f64),
+
     HyperListString(Vec<Vec<u8>>),
     HyperListInt(Vec<i64>),
     HyperListFloat(Vec<f64>),
+
+    HyperSetString(TreeSet<Vec<u8>>),
+    HyperSetInt(TreeSet<i64>),
+    HyperSetFloat(TreeSet<F64>),
+
+    HyperMapString(HashMap<Vec<u8>, Vec<u8>>),
+    HyperMapInt(HashMap<Vec<u8>, i64>),
+    HyperMapFloat(HashMap<Vec<u8>, f64>),
 }
 
 type Attributes = HashMap<String, HyperValue>;
@@ -111,7 +158,8 @@ unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_
                 loop {
                     let mut cstr = null();
                     let mut cstr_sz = 0;
-                    let status = hyperdex_ds_iterate_list_string_next(&mut citer, &mut cstr, &mut cstr_sz);
+                    let status =
+                        hyperdex_ds_iterate_list_string_next(&mut citer, &mut cstr, &mut cstr_sz);
                     if status > 0 {
                         lst.push(to_bytes_with_len(cstr, cstr_sz));
                     } else if status < 0 {
@@ -122,7 +170,171 @@ unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_
                 }
                 attrs.insert(name, HyperListString(lst));
             },
-            _ => return Err(format!("Wrong datatype: {}", attr.datatype)),
+            HYPERDATATYPE_LIST_INT64 => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_LIST_INT64,
+                                          attr.value, attr.value_sz);
+                let mut lst = Vec::new();
+                loop {
+                    let mut num = 0i64;
+                    let status = hyperdex_ds_iterate_list_int_next(&mut citer, &mut num);
+                    if status > 0 {
+                        lst.push(num);
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted list of integers".into_string());
+                    } else {
+                        break;
+                    }
+                }
+
+                attrs.insert(name, HyperListInt(lst));
+            },
+            HYPERDATATYPE_LIST_FLOAT => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_LIST_FLOAT,
+                                          attr.value, attr.value_sz);
+                let mut lst = Vec::new();
+                loop {
+                    let mut num = 0f64;
+                    let status = hyperdex_ds_iterate_list_float_next(&mut citer, &mut num);
+                    if status > 0 {
+                        lst.push(num);
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted list of floats".into_string());
+                    } else {
+                        break;
+                    }
+                }
+
+                attrs.insert(name, HyperListFloat(lst));
+            },
+            HYPERDATATYPE_SET_STRING => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_SET_STRING,
+                                          attr.value, attr.value_sz);
+                let mut set = TreeSet::new();
+                loop {
+                    let mut cstr = null();
+                    let mut cstr_sz = 0;
+                    let status =
+                        hyperdex_ds_iterate_set_string_next(&mut citer, &mut cstr, &mut cstr_sz);
+                    if status > 0 {
+                        set.insert(to_bytes_with_len(cstr, cstr_sz));
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted set of strings".into_string());
+                    } else {
+                        break;
+                    }
+                }
+                attrs.insert(name, HyperSetString(set));
+            },
+            HYPERDATATYPE_SET_INT64 => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_SET_INT64,
+                                          attr.value, attr.value_sz);
+                let mut set = TreeSet::new();
+                loop {
+                    let mut num = 0i64;
+                    let status = hyperdex_ds_iterate_set_int_next(&mut citer, &mut num);
+                    if status > 0 {
+                        set.insert(num);
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted set of integers".into_string());
+                    } else {
+                        break;
+                    }
+                }
+
+                attrs.insert(name, HyperSetInt(set));
+            },
+            HYPERDATATYPE_SET_FLOAT => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_SET_FLOAT,
+                                          attr.value, attr.value_sz);
+                let mut set = TreeSet::new();
+                loop {
+                    let mut num = 0f64;
+                    let status = hyperdex_ds_iterate_set_float_next(&mut citer, &mut num);
+                    if status > 0 {
+                        set.insert(F64 { value: num });
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted set of floats".into_string());
+                    } else {
+                        break;
+                    }
+                }
+
+                attrs.insert(name, HyperSetFloat(set));
+            },
+            HYPERDATATYPE_MAP_STRING_STRING => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_MAP_STRING_STRING,
+                                          attr.value, attr.value_sz);
+                let mut map = HashMap::new();
+                loop {
+                    let mut ckey = null();
+                    let mut ckey_sz = 0;
+                    let mut cval = null();
+                    let mut cval_sz = 0;
+                    let status =
+                        hyperdex_ds_iterate_map_string_string_next(&mut citer, &mut ckey, &mut ckey_sz,
+                                                                   &mut cval, &mut cval_sz);
+                    if status > 0 {
+                        map.insert(to_bytes_with_len(ckey, ckey_sz),
+                                   to_bytes_with_len(cval, cval_sz));
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted map of strings to strings".into_string());
+                    } else {
+                        break;
+                    }
+                }
+                attrs.insert(name, HyperMapString(map));
+            },
+            HYPERDATATYPE_MAP_STRING_INT64 => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_MAP_STRING_INT64,
+                                          attr.value, attr.value_sz);
+                let mut map = HashMap::new();
+                loop {
+                    let mut ckey = null();
+                    let mut ckey_sz = 0;
+                    let mut cval = 0;
+                    let status =
+                        hyperdex_ds_iterate_map_string_int_next(&mut citer, &mut ckey, &mut ckey_sz,
+                                                                &mut cval);
+                    if status > 0 {
+                        map.insert(to_bytes_with_len(ckey, ckey_sz), cval);
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted map of strings to integers".into_string());
+                    } else {
+                        break;
+                    }
+                }
+                attrs.insert(name, HyperMapInt(map));
+            },
+            HYPERDATATYPE_MAP_STRING_FLOAT => {
+                let mut citer = Struct_hyperdex_ds_iterator::new();
+                hyperdex_ds_iterator_init(&mut citer, HYPERDATATYPE_MAP_STRING_FLOAT,
+                                          attr.value, attr.value_sz);
+                let mut map = HashMap::new();
+                loop {
+                    let mut ckey = null();
+                    let mut ckey_sz = 0;
+                    let mut cval = 0f64;
+                    let status =
+                        hyperdex_ds_iterate_map_string_float_next(&mut citer, &mut ckey, &mut ckey_sz,
+                                                                  &mut cval);
+                    if status > 0 {
+                        map.insert(to_bytes_with_len(ckey, ckey_sz), cval);
+                    } else if status < 0 {
+                        return Err("Server sent a corrupted map of strings to floats".into_string());
+                    } else {
+                        break;
+                    }
+                }
+                attrs.insert(name, HyperMapFloat(map));
+            },
+            _ => { return Err(format!("Unrecognized datatype: {}", attr.datatype)); }
         }
     }
 
