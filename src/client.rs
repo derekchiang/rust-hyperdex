@@ -509,7 +509,33 @@ impl InnerClient {
                             });
                             ops.remove(&reqid);
                         },
+
                         Some(HyperStateSearch(state)) => {
+                            if state.status == HYPERDEX_CLIENT_SUCCESS {
+                                match build_attrs(state.attrs, state.attrs_sz) {
+                                    Ok(attrs) => {
+                                        state.val_tx.send(attrs);
+                                    },
+                                    Err(err) => {
+                                        let herr = HyperError {
+                                            status: HYPERDEX_CLIENT_SERVERERROR,
+                                            message: err,
+                                            location: String::new(),
+                                        };
+                                        state.err_tx.send(herr);
+                                    }
+                                }
+                                hyperdex_client_destroy_attrs(state.attrs, state.attrs_sz);
+                            } else if state.status == HYPERDEX_CLIENT_SEARCHDONE {
+                                ops.remove(&reqid);
+                            } else {
+                                let err = HyperError {
+                                    status: state.status,
+                                    message: to_string(hyperdex_client_error_message(self.ptr)),
+                                    location: to_string(hyperdex_client_error_location(self.ptr)),
+                                };
+                                state.err_tx.send(err);
+                            }
                         },
                     }
                 }
