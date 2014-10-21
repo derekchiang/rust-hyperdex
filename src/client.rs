@@ -1,7 +1,6 @@
 use std::io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
 use std::comm::{Empty, Disconnected};
-use std::ptr::null_mut;
 use std::collections::{HashMap, TreeSet};
 use std::c_str::CString;
 use std::vec::raw::from_buf;
@@ -11,6 +10,8 @@ use std::c_vec::CVec;
 use std::mem::transmute;
 use std::hash::Hash;
 use std::hash::sip::SipState;
+use std::sync::atomics;
+use std::sync::atomics::AtomicInt;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
@@ -91,9 +92,9 @@ enum HyperValue {
     HyperMapFloatFloat(HashMap<F64, f64>),
 }
 
-type Attributes = HashMap<String, HyperValue>;
+pub type HyperObject = HashMap<String, HyperValue>;
 
-struct HyperError {
+pub struct HyperError {
     status: u32,
     message: String,
     location: String,
@@ -104,7 +105,7 @@ struct SearchState {
     status: Enum_hyperdex_client_returncode,
     attrs: *const Struct_hyperdex_client_attribute,
     attrs_sz: size_t,
-    val_tx: Sender<Attributes>,
+    val_tx: Sender<HyperObject>,
     err_tx: Sender<HyperError>,
 }
 
@@ -141,7 +142,7 @@ unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
     String::from_utf8(to_bytes(ptr)).unwrap()  // TODO: better error handling
 }
 
-unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<Attributes, String> {
+unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
     let mut attrs = HashMap::new();
 
     for i in range(0, c_attrs_sz) {
@@ -545,7 +546,8 @@ impl InnerClient {
 }
 
 pub struct Client {
-    inner_clients: Vec<InnerClient>
+    counter: AtomicInt,
+    inner_clients: Vec<InnerClient>,
 }
 
 impl Client {
@@ -577,8 +579,48 @@ impl Client {
         };
 
         Ok(Client {
-            inner_clients: inner_clients
+            counter: AtomicInt::new(0),
+            inner_clients: inner_clients,
         })
+    }
+
+    pub fn get(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
+        match self.get_async(space, key) {
+            Ok((val_rx, err_rx)) => {
+                select!(
+                    val = val_rx.recv() => Ok(val),
+                    err = err_rx.recv() => Err(err)
+                )
+            },
+            Err(err) => Err(err)
+        }
+    }
+
+    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Result<(Receiver<HyperObject>, Receiver<HyperError>), HyperError> {
+        let space_cstr = space.to_c_str().as_ptr();
+        let key_cstr = key.as_ptr() as *const i8;
+        let key_sz = key.len() as u64;
+        let mut status = 0;
+        let mut attrs = null();
+        let mut attrs_sz = 0;
+
+        // TODO: Is "Relaxed" good enough?
+        let inner_client =
+            self.inner_clients.get(self.counter.fetch_add(1, atomics::Relaxed) as uint).clone();
+        let (err_tx, err_rx) = channel();
+        let mut ops_mutex = inner_client.ops.clone();
+        {
+            let mut ops = &mut*ops_mutex.lock();
+            let req_id = unsafe {
+                hyperdex_client_get(inner_client.ptr, space_cstr, key_cstr, key_sz,
+                                    &mut status, &mut attrs, &mut attrs_sz)
+            };
+            ops.insert(req_id, HyperStateOp(err_tx));
+        }
+
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        Ok((rx1, rx2))
     }
 
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
