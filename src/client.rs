@@ -5,13 +5,14 @@ use std::collections::{HashMap, TreeSet};
 use std::c_str::CString;
 use std::vec::raw::from_buf;
 use std::path::BytesContainer;
-use std::ptr::null;
+use std::ptr::{null, null_mut};
 use std::c_vec::CVec;
 use std::mem::transmute;
 use std::hash::Hash;
 use std::hash::sip::SipState;
-use std::sync::atomics;
-use std::sync::atomics::AtomicInt;
+use std::sync::atomic;
+use std::sync::atomic::AtomicInt;
+use std::sync::Future;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
@@ -142,7 +143,7 @@ unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
     String::from_utf8(to_bytes(ptr)).unwrap()  // TODO: better error handling
 }
 
-unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
+unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
     let mut attrs = HashMap::new();
 
     for i in range(0, c_attrs_sz) {
@@ -471,6 +472,99 @@ unsafe fn build_attrs(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_
     return Ok(attrs);
 }
 
+unsafe fn convert_cstring(arena: *mut Struct_hyperdex_ds_arena, s: String) -> Result<*const i8, String> {
+    let cstr = s.to_c_str();
+    let mut err = 0;
+    let mut cs = null();
+    let mut sz = 0;
+    if hyperdex_ds_copy_string(arena, cstr.as_ptr(), (cstr.len() + 1) as u64, &mut err, &mut cs, &mut sz) < 0 {
+        Err("failed to allocate memory".into_string())
+    } else {
+        Ok(cs)
+    }
+}
+
+unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) -> Result<(*const i8, size_t, Enum_hyperdatatype), String> {
+    let mut status = 0;
+    let mut cs = null();
+    let mut sz = 0;
+    let mem_err = Err("failed to allocate memory".into_string());
+
+    match val {
+        HyperString(s) => {
+            let cstr = CString::new(s.as_ptr() as *const i8, false);
+            if hyperdex_ds_copy_string(arena, cstr.as_ptr(), cstr.len() as u64,
+                                       &mut status, &mut cs, &mut sz) < 0 {
+                mem_err
+            } else {
+                Ok((cs, sz, HYPERDATATYPE_STRING))
+            }
+        },
+        HyperInt(i) => {
+            if hyperdex_ds_copy_int(arena, i, &mut status, &mut cs, &mut sz) < 0 {
+                mem_err
+            } else {
+                Ok((cs, sz, HYPERDATATYPE_INT64))
+            }
+        },
+        HyperFloat(f) => {
+            if hyperdex_ds_copy_float(arena, f, &mut status, &mut cs, &mut sz) < 0 {
+                mem_err
+            } else {
+                Ok((cs, sz, HYPERDATATYPE_FLOAT))
+            }
+        },
+        HyperListString(ls) => {
+            let ds_lst = hyperdex_ds_allocate_list(arena);
+            if ds_lst.is_null() {
+                mem_err
+            } else {
+                for s in ls.iter() {
+                    let cstr = CString::new(s.as_ptr() as *const i8, false);
+                    if hyperdex_ds_list_append_string(ds_lst, cstr.as_ptr(),
+                                                      cstr.len() as u64, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_list_finalize(ds_lst, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        _ => {
+            fail!("TODO");
+        }
+        // HyperSetString(ss) => {
+            // let ds_set = hyperdex_ds_allocate_set(arena);
+            // for s in ss.iter() {
+                // let cstr = s.to_c_str();
+                // if hyperdex_ds_set_insert_string(ds_set, cstr.as_ptr(), cstr.len(), &status)
+            // }
+        // }
+    }
+}
+
+unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperObject) -> Result<Vec<Struct_hyperdex_client_attribute>, String> {
+    let mut attrs = Vec::new();
+
+    for (key, val) in obj.into_iter() {
+        let mut ckey = try!(convert_cstring(arena, key));
+        let (cval, cval_sz, dt) = try!(convert_type(arena, val));
+        attrs.push(Struct_hyperdex_client_attribute {
+            attr: ckey,
+            value: cval,
+            value_sz: cval_sz,
+            datatype: dt,
+        });
+    }
+
+    Ok(attrs)
+}
+
 impl InnerClient {
 
     fn new(ptr: *mut Struct_hyperdex_client, err_tx: Sender<HyperError>) -> InnerClient {
@@ -513,7 +607,7 @@ impl InnerClient {
 
                         Some(HyperStateSearch(state)) => {
                             if state.status == HYPERDEX_CLIENT_SUCCESS {
-                                match build_attrs(state.attrs, state.attrs_sz) {
+                                match build_hyperobject(state.attrs, state.attrs_sz) {
                                     Ok(attrs) => {
                                         state.val_tx.send(attrs);
                                     },
@@ -585,18 +679,10 @@ impl Client {
     }
 
     pub fn get(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
-        match self.get_async(space, key) {
-            Ok((val_rx, err_rx)) => {
-                select!(
-                    val = val_rx.recv() => Ok(val),
-                    err = err_rx.recv() => Err(err)
-                )
-            },
-            Err(err) => Err(err)
-        }
+        self.get_async(space, key).unwrap()
     }
 
-    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Result<(Receiver<HyperObject>, Receiver<HyperError>), HyperError> {
+    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
         let space_cstr = space.to_c_str().as_ptr();
         let key_cstr = key.as_ptr() as *const i8;
         let key_sz = key.len() as u64;
@@ -606,8 +692,9 @@ impl Client {
 
         // TODO: Is "Relaxed" good enough?
         let inner_client =
-            self.inner_clients.get(self.counter.fetch_add(1, atomics::Relaxed) as uint).clone();
+            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
         let (err_tx, err_rx) = channel();
+
         let mut ops_mutex = inner_client.ops.clone();
         {
             let mut ops = &mut*ops_mutex.lock();
@@ -618,9 +705,27 @@ impl Client {
             ops.insert(req_id, HyperStateOp(err_tx));
         }
 
-        let (tx1, rx1) = channel();
-        let (tx2, rx2) = channel();
-        Ok((rx1, rx2))
+        Future::from_fn(proc() {
+            let err = err_rx.recv();
+            if err.status != HYPERDEX_CLIENT_SUCCESS {
+                Err(err)
+            } else {
+                unsafe {
+                    match build_hyperobject(attrs, attrs_sz) {
+                        Ok(obj) => {
+                            Ok(obj)
+                        },
+                        Err(msg) => {
+                            Err(HyperError {
+                                status: HYPERDEX_CLIENT_SERVERERROR,
+                                message: msg,
+                                location: String::new(),
+                            })
+                        }
+                    }
+                }
+            }
+        })
     }
 
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
