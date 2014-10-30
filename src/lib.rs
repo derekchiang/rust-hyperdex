@@ -11,3 +11,4 @@ mod hyperdex_client;
 mod hyperdex_admin;
 mod hyperdex_datastructures;
 mod hyperdex_hyperspace_builder;
+mod common;

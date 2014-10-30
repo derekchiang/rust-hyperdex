@@ -19,6 +19,8 @@ use sync::{Arc, Mutex};
 
 use libc::*;
 
+use super::*;
+use common::*;
 use hyperdex::*;
 use hyperdex_client::*;
 use hyperdex_datastructures::*;
@@ -95,12 +97,6 @@ enum HyperValue {
 
 pub type HyperObject = HashMap<String, HyperValue>;
 
-pub struct HyperError {
-    status: u32,
-    message: String,
-    location: String,
-}
-
 #[deriving(Clone)]
 struct SearchState {
     status: Enum_hyperdex_client_returncode,
@@ -126,21 +122,6 @@ struct InnerClient {
     ptr: *mut Struct_hyperdex_client,
     ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
     err_tx: Sender<HyperError>,
-}
-
-unsafe fn to_bytes(ptr: *const ::libc::c_char) -> Vec<u8> {
-    CString::new(ptr, true).container_into_owned_bytes()
-}
-
-unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8> {
-    let cvec = CVec::new(ptr as *mut u8, len as uint);
-    let mut vec = Vec::with_capacity(len as uint);
-    vec.push_all(cvec.as_slice());
-    return vec;
-}
-
-unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
-    String::from_utf8(to_bytes(ptr)).unwrap()  // TODO: better error handling
 }
 
 unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {

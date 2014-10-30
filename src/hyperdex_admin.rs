@@ -12,21 +12,21 @@ pub struct Struct_hyperdex_admin_perf_counter {
     pub measurement: uint64_t,
 }
 pub type Enum_hyperdex_admin_returncode = ::libc::c_uint;
-pub static HYPERDEX_ADMIN_SUCCESS: ::libc::c_uint = 8704;
-pub static HYPERDEX_ADMIN_NOMEM: ::libc::c_uint = 8768;
-pub static HYPERDEX_ADMIN_NONEPENDING: ::libc::c_uint = 8769;
-pub static HYPERDEX_ADMIN_POLLFAILED: ::libc::c_uint = 8770;
-pub static HYPERDEX_ADMIN_TIMEOUT: ::libc::c_uint = 8771;
-pub static HYPERDEX_ADMIN_INTERRUPTED: ::libc::c_uint = 8772;
-pub static HYPERDEX_ADMIN_SERVERERROR: ::libc::c_uint = 8773;
-pub static HYPERDEX_ADMIN_COORDFAIL: ::libc::c_uint = 8774;
-pub static HYPERDEX_ADMIN_BADSPACE: ::libc::c_uint = 8775;
-pub static HYPERDEX_ADMIN_DUPLICATE: ::libc::c_uint = 8776;
-pub static HYPERDEX_ADMIN_NOTFOUND: ::libc::c_uint = 8777;
-pub static HYPERDEX_ADMIN_LOCALERROR: ::libc::c_uint = 8778;
-pub static HYPERDEX_ADMIN_INTERNAL: ::libc::c_uint = 8829;
-pub static HYPERDEX_ADMIN_EXCEPTION: ::libc::c_uint = 8830;
-pub static HYPERDEX_ADMIN_GARBAGE: ::libc::c_uint = 8831;
+pub const HYPERDEX_ADMIN_SUCCESS: ::libc::c_uint = 8704;
+pub const HYPERDEX_ADMIN_NOMEM: ::libc::c_uint = 8768;
+pub const HYPERDEX_ADMIN_NONEPENDING: ::libc::c_uint = 8769;
+pub const HYPERDEX_ADMIN_POLLFAILED: ::libc::c_uint = 8770;
+pub const HYPERDEX_ADMIN_TIMEOUT: ::libc::c_uint = 8771;
+pub const HYPERDEX_ADMIN_INTERRUPTED: ::libc::c_uint = 8772;
+pub const HYPERDEX_ADMIN_SERVERERROR: ::libc::c_uint = 8773;
+pub const HYPERDEX_ADMIN_COORDFAIL: ::libc::c_uint = 8774;
+pub const HYPERDEX_ADMIN_BADSPACE: ::libc::c_uint = 8775;
+pub const HYPERDEX_ADMIN_DUPLICATE: ::libc::c_uint = 8776;
+pub const HYPERDEX_ADMIN_NOTFOUND: ::libc::c_uint = 8777;
+pub const HYPERDEX_ADMIN_LOCALERROR: ::libc::c_uint = 8778;
+pub const HYPERDEX_ADMIN_INTERNAL: ::libc::c_uint = 8829;
+pub const HYPERDEX_ADMIN_EXCEPTION: ::libc::c_uint = 8830;
+pub const HYPERDEX_ADMIN_GARBAGE: ::libc::c_uint = 8831;
 #[link(name = "hyperdex-admin")]
 extern "C" {
     pub fn hyperdex_admin_create(coordinator: *const ::libc::c_char,
