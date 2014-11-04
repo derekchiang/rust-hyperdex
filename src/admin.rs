@@ -14,7 +14,6 @@ use hyperdex_admin::*;
 pub struct Admin {
     ptr: *mut Struct_hyperdex_admin,
     req_tx: Sender<AdminRequest>,
-    shutdown_tx: Sender<()>,
 }
 
 pub struct AdminRequest {
@@ -35,7 +34,6 @@ impl Admin {
             Err(format!("Could not create hyperdex_admin ({})", coordinator))
         } else {
             let (req_tx, req_rx) = channel();
-            let (shutdown_tx, shutdown_rx) = channel();
 
             spawn(proc() {
                 // A list of pending requests
@@ -97,15 +95,19 @@ impl Admin {
 
                 loop {
                     select!(
-                        // Shutdown the thread
-                        () = shutdown_rx.recv() => {
-                            hyperdex_admin_destroy(ptr);
-                            return;
-                        },
                         // Add a new request
-                        req = req_rx.recv() => {
-                            pending.push(req);
-                            loop_fn(&mut pending);
+                        msg = req_rx.recv_opt() => {
+                            match msg {
+                                Ok(req) => {
+                                    pending.push(req);
+                                    loop_fn(&mut pending);
+                                },
+                                Err(()) => {
+                                    // TODO: this is causing trouble for some reason
+                                    // hyperdex_admin_destroy(ptr);
+                                    return;
+                                }
+                            };
                         },
                         // Wake up and call loop()
                         () = periodic.recv() => {
@@ -118,7 +120,6 @@ impl Admin {
             Ok(Admin {
                 ptr: ptr,
                 req_tx: req_tx,
-                shutdown_tx: shutdown_tx,
             })
         }
 
@@ -177,11 +178,5 @@ impl Admin {
 
             res_rx
         }
-    }
-}
-
-impl Drop for Admin {
-    fn drop(&mut self) {
-        self.shutdown_tx.send(());
     }
 }
