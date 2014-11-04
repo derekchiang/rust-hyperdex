@@ -517,7 +517,7 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
             }
         },
         _ => {
-            fail!("TODO");
+            panic!("TODO");
         }
         // HyperSetString(ss) => {
             // let ds_set = hyperdex_ds_allocate_set(arena);

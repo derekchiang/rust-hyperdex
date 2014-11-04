@@ -2,6 +2,7 @@ use std::c_str::CString;
 use std::c_vec::CVec;
 use std::path::BytesContainer;
 
+#[deriving(Show)]
 pub struct HyperError {
     pub status: u32,
     pub message: String,
@@ -9,7 +10,7 @@ pub struct HyperError {
 }
 
 pub unsafe fn to_bytes(ptr: *const ::libc::c_char) -> Vec<u8> {
-    CString::new(ptr, true).container_into_owned_bytes()
+    CString::new(ptr, false).container_into_owned_bytes()
 }
 
 pub unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8> {

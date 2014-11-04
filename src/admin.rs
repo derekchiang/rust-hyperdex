@@ -1,6 +1,8 @@
-use std::io::timer::Timer;
+use std::io::timer::{sleep, Timer};
 use std::io::net::ip::SocketAddr;
 use std::time::duration::Duration;
+use std::sync::Future;
+
 
 use libc::*;
 
@@ -10,25 +12,27 @@ use hyperdex::*;
 use hyperdex_admin::*;
 
 pub struct Admin {
+    ptr: *mut Struct_hyperdex_admin,
     req_tx: Sender<AdminRequest>,
     shutdown_tx: Sender<()>,
 }
 
 pub struct AdminRequest {
     id: int64_t,
-    status: *mut int64_t,
+    status: *mut u32,
     success: Option<proc(): Send>,
     failure: Option<proc(err: HyperError): Send>,
 }
 
 impl Admin {
-    pub unsafe fn new(coordinator: SocketAddr) -> Result<Admin, String> {
-        let ip = format!("{}", coordinator.ip).to_c_str().as_ptr();
-        let port = coordinator.port;
+    pub fn new(coordinator: SocketAddr) -> Result<Admin, String> {
+        unsafe {
 
-        let ptr = hyperdex_admin_create(ip, port);
+        let ip_str = format!("{}", coordinator.ip).to_c_str();
+
+        let ptr = hyperdex_admin_create(ip_str.as_ptr(), coordinator.port);
         if ptr.is_null() {
-            Err(format!("Could not create hyperdex_admin (ip={}, port={})", ip, port))
+            Err(format!("Could not create hyperdex_admin ({})", coordinator))
         } else {
             let (req_tx, req_rx) = channel();
             let (shutdown_tx, shutdown_rx) = channel();
@@ -43,10 +47,18 @@ impl Admin {
                 let periodic = timer.periodic(Duration::milliseconds(100));
 
                 let loop_fn = |pending: &mut Vec<AdminRequest>| {
+                    if pending.len() == 0 {
+                        return;
+                    }
+
                     let mut status = 0;
                     let ret = hyperdex_admin_loop(ptr, -1, &mut status);
                     if ret < 0 {
-                        fail!("HyperDex admin error");  // TODO: better error handling
+                        if ret == -1 {
+                            return;
+                        } else {
+                            panic!(format!("the return code was: {}", ret));
+                        }
                     }
                     let req_index = pending.iter().position(|req| {
                         if req.id == ret {
@@ -58,7 +70,7 @@ impl Admin {
                     let req = pending.remove(req_index).unwrap();
 
                     if status == HYPERDEX_ADMIN_SUCCESS {
-                        match *req.status as u32 {
+                        match *req.status {
                             HYPERDEX_ADMIN_SUCCESS => {
                                 if req.success.is_some() {
                                     req.success.unwrap()();
@@ -67,7 +79,7 @@ impl Admin {
                             _ => {
                                 if req.failure.is_some() {
                                     req.failure.unwrap()(HyperError {
-                                        status: *req.status as u32,
+                                        status: *req.status,
                                         message: to_string(hyperdex_admin_error_message(ptr)),
                                         location: to_string(hyperdex_admin_error_location(ptr)),
                                     });
@@ -104,9 +116,72 @@ impl Admin {
             });
 
             Ok(Admin {
+                ptr: ptr,
                 req_tx: req_tx,
                 shutdown_tx: shutdown_tx,
             })
         }
+
+        }
+    }
+
+    pub fn add_space(&self, desc: String) -> Receiver<Result<(), HyperError>> {
+        self.add_or_remove_space(desc, "add")
+    }
+
+    pub fn remove_space(&self, desc: String) -> Receiver<Result<(), HyperError>> {
+        self.add_or_remove_space(desc, "remove")
+    }
+
+    fn add_or_remove_space(&self, desc: String, func: &str) -> Receiver<Result<(), HyperError>> {
+        unsafe {
+            let mut status = 0;
+            let (res_tx, res_rx) = channel();
+            let req_id = match func {
+                "add" => {
+                    hyperdex_admin_add_space(self.ptr,
+                                             desc.as_bytes().as_ptr() as *const i8,
+                                             &mut status)
+                },
+                "remove" => {
+                    hyperdex_admin_rm_space(self.ptr,
+                                            desc.as_bytes().as_ptr() as *const i8,
+                                            &mut status)
+                },
+                _ => {
+                    panic!("wrong func name");
+                }
+            };
+            if req_id == -1 {
+                res_tx.send(Err(HyperError {
+                    status: status,
+                    message: to_string(hyperdex_admin_error_message(self.ptr)),
+                    location: to_string(hyperdex_admin_error_location(self.ptr)),
+                }));
+                return res_rx;
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: &mut status,
+                success: Some(proc() {
+                    res_tx.send(Ok(()));
+                }),
+                failure: Some(proc(err: HyperError) {
+                    res_tx2.send(Err(err));
+                }),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx
+        }
+    }
+}
+
+impl Drop for Admin {
+    fn drop(&mut self) {
+        self.shutdown_tx.send(());
     }
 }
