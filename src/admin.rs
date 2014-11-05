@@ -76,20 +76,12 @@ impl Admin {
                             },
                             _ => {
                                 if req.failure.is_some() {
-                                    req.failure.unwrap()(HyperError {
-                                        status: *req.status,
-                                        message: to_string(hyperdex_admin_error_message(ptr)),
-                                        location: to_string(hyperdex_admin_error_location(ptr)),
-                                    });
+                                    req.failure.unwrap()(get_admin_error(ptr, *req.status));
                                 }
                             }
                         }
                     } else if req.failure.is_some() {
-                        req.failure.unwrap()(HyperError {
-                            status: status,
-                            message: to_string(hyperdex_admin_error_message(ptr)),
-                            location: to_string(hyperdex_admin_error_location(ptr)),
-                        });
+                        req.failure.unwrap()(get_admin_error(ptr, status));
                     }
                 };
 
@@ -154,11 +146,7 @@ impl Admin {
                 }
             };
             if req_id == -1 {
-                res_tx.send(Err(HyperError {
-                    status: status,
-                    message: to_string(hyperdex_admin_error_message(self.ptr)),
-                    location: to_string(hyperdex_admin_error_location(self.ptr)),
-                }));
+                res_tx.send(Err(get_admin_error(self.ptr, status)));
                 return res_rx;
             }
 

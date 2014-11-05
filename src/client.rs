@@ -13,6 +13,8 @@ use std::hash::sip::SipState;
 use std::sync::atomic;
 use std::sync::atomic::AtomicInt;
 use std::sync::Future;
+use std::time::duration::Duration;
+use std::io::timer::sleep;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
@@ -27,6 +29,7 @@ use hyperdex_datastructures::*;
 
 /// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
 /// by wrapping them in a struct and implement those traits
+#[deriving(Show)]
 struct F64(f64);
 
 impl PartialEq for F64 {
@@ -69,6 +72,7 @@ impl Hash for F64 {
     }
 }
 
+#[deriving(Show)]
 enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
@@ -548,17 +552,18 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
 
 impl InnerClient {
 
-    fn new(ptr: *mut Struct_hyperdex_client, err_tx: Sender<HyperError>) -> InnerClient {
-        InnerClient {
-            ptr: ptr,
-            ops: Arc::new(Mutex::new(HashMap::new())),
-            err_tx: err_tx,
-        }
-    }
-
-    fn run_forever(&mut self) {
+    fn run_forever(&mut self, shutdown_rx: Receiver<()>) {
         unsafe {
             loop {
+                match shutdown_rx.try_recv() {
+                    Err(Empty) => (),
+                    // Otherwise, the client has been dropped
+                    _ => {
+                        hyperdex_client_destroy(self.ptr);
+                        return;
+                    }
+                }
+
                 hyperdex_client_block(self.ptr, 250);  // prevent busy spinning
                 let mut loop_status = 0u32;
                 let reqid = hyperdex_client_loop(self.ptr, 0, &mut loop_status);
@@ -567,22 +572,13 @@ impl InnerClient {
                 } else if reqid < 0 && loop_status == HYPERDEX_CLIENT_NONEPENDING {
                     // pass
                 } else if reqid < 0 {
-                    let e = HyperError {
-                        status: loop_status,
-                        message: to_string(hyperdex_client_error_message(self.ptr)),
-                        location: to_string(hyperdex_client_error_location(self.ptr)),
-                    };
-                    self.err_tx.send(e);
+                    self.err_tx.send(get_client_error(self.ptr, loop_status));
                 } else {
                     let mut ops = &mut*self.ops.lock();
                     match ops.find_copy(&reqid) {
-                        None => {},  // TODO: this seems to be an error case... might want to do something
+                        None => { panic!("should not happen") },
                         Some(HyperStateOp(op_tx)) => {
-                            op_tx.send(HyperError {
-                                status: loop_status,
-                                message: to_string(hyperdex_client_error_message(self.ptr)),
-                                location: to_string(hyperdex_client_error_location(self.ptr)),
-                            });
+                            op_tx.send(get_client_error(self.ptr, loop_status));
                             ops.remove(&reqid);
                         },
 
@@ -605,12 +601,7 @@ impl InnerClient {
                             } else if state.status == HYPERDEX_CLIENT_SEARCHDONE {
                                 ops.remove(&reqid);
                             } else {
-                                let err = HyperError {
-                                    status: state.status,
-                                    message: to_string(hyperdex_client_error_message(self.ptr)),
-                                    location: to_string(hyperdex_client_error_location(self.ptr)),
-                                };
-                                state.err_tx.send(err);
+                                state.err_tx.send(get_client_error(self.ptr, state.status));
                             }
                         },
                     }
@@ -622,24 +613,26 @@ impl InnerClient {
 
 pub struct Client {
     counter: AtomicInt,
+    shutdown_txs: Vec<Sender<()>>,
     inner_clients: Vec<InnerClient>,
 }
 
 impl Client {
 
     pub fn new(coordinator: SocketAddr) -> Result<Client, String> {
-        let ip = format!("{}", coordinator.ip).to_c_str().as_ptr();
-        let port = coordinator.port;
+        let ip_str = format!("{}", coordinator.ip).to_c_str();
 
         let (err_tx, err_rx) = channel();
 
         let mut inner_clients = Vec::new();
+        let mut shutdown_txs = Vec::new();
         for _ in range(0, num_cpus()) {
-            let ptr = unsafe { hyperdex_client_create(ip, port) };
+            let ptr = unsafe { hyperdex_client_create(ip_str.as_ptr(), coordinator.port) };
             if ptr.is_null() {
                 return Err(format!("Unable to create client.  errno is: {}", errno()));
             } else {
                 let ops = Arc::new(Mutex::new(HashMap::new()));
+                let (shutdown_tx, shutdown_rx) = channel();
                 let mut inner_client = InnerClient {
                     ptr: ptr,
                     ops: ops.clone(),
@@ -647,49 +640,61 @@ impl Client {
                 };
                 let mut ic_clone = inner_client.clone();
                 spawn(proc() {
-                    ic_clone.run_forever();
+                    ic_clone.run_forever(shutdown_rx);
                 });
                 inner_clients.push(inner_client);
+                shutdown_txs.push(shutdown_tx);
             }
         };
 
         Ok(Client {
             counter: AtomicInt::new(0),
             inner_clients: inner_clients,
+            shutdown_txs: shutdown_txs,
         })
     }
 
     pub fn get(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
-        self.get_async(space, key).unwrap()
+        self.get_async(space, key).recv()
     }
 
-    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
-        let space_cstr = space.to_c_str().as_ptr();
-        let key_cstr = key.as_ptr() as *const i8;
-        let key_sz = key.len() as u64;
-        let mut status = 0;
-        let mut attrs = null();
-        let mut attrs_sz = 0;
-
+    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Receiver<Result<HyperObject, HyperError>> {
+        let (res_tx, res_rx) = channel();
         // TODO: Is "Relaxed" good enough?
         let inner_client =
             self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
-        let (err_tx, err_rx) = channel();
+        spawn(proc() {
+            let space_cstr = space.to_c_str();
+            let key_cstr = key.as_ptr() as *const i8;
+            let key_sz = key.len() as u64;
+            let mut status = 0;
+            let mut attrs = null();
+            let mut attrs_sz = 0;
 
-        let mut ops_mutex = inner_client.ops.clone();
-        {
-            let mut ops = &mut*ops_mutex.lock();
-            let req_id = unsafe {
-                hyperdex_client_get(inner_client.ptr, space_cstr, key_cstr, key_sz,
-                                    &mut status, &mut attrs, &mut attrs_sz)
-            };
-            ops.insert(req_id, HyperStateOp(err_tx));
-        }
+            let (err_tx, err_rx) = channel();
 
-        Future::from_fn(proc() {
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock();
+                let req_id = unsafe {
+                    hyperdex_client_get(inner_client.ptr, space_cstr.as_ptr(), key_cstr, key_sz,
+                                        &mut status, &mut attrs, &mut attrs_sz)
+                };
+                if req_id < 0 {
+                    unsafe {
+                        return res_tx.send(Err(get_client_error(inner_client.ptr, -1)));
+                    }
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+
             let err = err_rx.recv();
-            if err.status != HYPERDEX_CLIENT_SUCCESS {
+            res_tx.send(if err.status != HYPERDEX_CLIENT_SUCCESS {
                 Err(err)
+            } else if status != HYPERDEX_CLIENT_SUCCESS {
+                unsafe {
+                    Err(get_client_error(inner_client.ptr, status))
+                }
             } else {
                 unsafe {
                     match build_hyperobject(attrs, attrs_sz) {
@@ -705,8 +710,9 @@ impl Client {
                         }
                     }
                 }
-            }
-        })
+            });
+        });
+        return res_rx;
     }
 
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
@@ -724,12 +730,4 @@ impl Client {
     // }
 
 }
-
-// impl Drop for Client {
-    // fn drop(&mut self) {
-        // unsafe {
-            // hyperdex_client_destroy(self.ptr);
-        // }
-    // }
-// }
 
