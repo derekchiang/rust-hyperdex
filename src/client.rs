@@ -15,9 +15,12 @@ use std::sync::atomic::AtomicInt;
 use std::sync::Future;
 use std::time::duration::Duration;
 use std::io::timer::sleep;
+use std::task::TaskBuilder;
 
 use sync::deque::{BufferPool, Stealer, Worker};
 use sync::{Arc, Mutex};
+
+use green::{SchedPool, PoolConfig, GreenTaskBuilder};
 
 use libc::*;
 
@@ -30,7 +33,7 @@ use hyperdex_datastructures::*;
 /// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
 /// by wrapping them in a struct and implement those traits
 #[deriving(Show)]
-struct F64(f64);
+pub struct F64(f64);
 
 impl PartialEq for F64 {
     fn eq(&self, other: &F64) -> bool {
@@ -71,35 +74,6 @@ impl Hash for F64 {
         }
     }
 }
-
-#[deriving(Show)]
-enum HyperValue {
-    HyperString(Vec<u8>),
-    HyperInt(i64),
-    HyperFloat(f64),
-
-    HyperListString(Vec<Vec<u8>>),
-    HyperListInt(Vec<i64>),
-    HyperListFloat(Vec<f64>),
-
-    HyperSetString(TreeSet<Vec<u8>>),
-    HyperSetInt(TreeSet<i64>),
-    HyperSetFloat(TreeSet<F64>),
-
-    HyperMapStringString(HashMap<Vec<u8>, Vec<u8>>),
-    HyperMapStringInt(HashMap<Vec<u8>, i64>),
-    HyperMapStringFloat(HashMap<Vec<u8>, f64>),
-
-    HyperMapIntString(HashMap<i64, Vec<u8>>),
-    HyperMapIntInt(HashMap<i64, i64>),
-    HyperMapIntFloat(HashMap<i64, f64>),
-
-    HyperMapFloatString(HashMap<F64, Vec<u8>>),
-    HyperMapFloatInt(HashMap<F64, i64>),
-    HyperMapFloatFloat(HashMap<F64, f64>),
-}
-
-pub type HyperObject = HashMap<String, HyperValue>;
 
 #[deriving(Clone)]
 struct SearchState {
@@ -550,6 +524,35 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
     Ok(attrs)
 }
 
+#[deriving(Show)]
+pub enum HyperValue {
+    HyperString(Vec<u8>),
+    HyperInt(i64),
+    HyperFloat(f64),
+
+    HyperListString(Vec<Vec<u8>>),
+    HyperListInt(Vec<i64>),
+    HyperListFloat(Vec<f64>),
+
+    HyperSetString(TreeSet<Vec<u8>>),
+    HyperSetInt(TreeSet<i64>),
+    HyperSetFloat(TreeSet<F64>),
+
+    HyperMapStringString(HashMap<Vec<u8>, Vec<u8>>),
+    HyperMapStringInt(HashMap<Vec<u8>, i64>),
+    HyperMapStringFloat(HashMap<Vec<u8>, f64>),
+
+    HyperMapIntString(HashMap<i64, Vec<u8>>),
+    HyperMapIntInt(HashMap<i64, i64>),
+    HyperMapIntFloat(HashMap<i64, f64>),
+
+    HyperMapFloatString(HashMap<F64, Vec<u8>>),
+    HyperMapFloatInt(HashMap<F64, i64>),
+    HyperMapFloatFloat(HashMap<F64, f64>),
+}
+
+pub type HyperObject = HashMap<String, HyperValue>;
+
 impl InnerClient {
 
     fn run_forever(&mut self, shutdown_rx: Receiver<()>) {
@@ -615,8 +618,14 @@ pub struct Client {
     counter: AtomicInt,
     shutdown_txs: Vec<Sender<()>>,
     inner_clients: Vec<InnerClient>,
+    thread_pool: SchedPool,
 }
 
+// To support asynchronous API, the client spawns a thread for each invocation of the API.
+// However, in the presense of a large number of invocations, we may find ourselves with
+// too many threads.  Thus, the client doesn't spawn real OS thread; rather, it uses green
+// threads, as implemented by crate green.  The green threads are multiplexed to num_cpus()
+// real OS threads.
 impl Client {
 
     pub fn new(coordinator: SocketAddr) -> Result<Client, String> {
@@ -647,11 +656,20 @@ impl Client {
             }
         };
 
+        let mut config = PoolConfig::new();
+        config.threads = num_cpus();
+        let mut pool = SchedPool::new(config);
+
         Ok(Client {
             counter: AtomicInt::new(0),
             inner_clients: inner_clients,
             shutdown_txs: shutdown_txs,
+            thread_pool: pool,
         })
+    }
+
+    fn spawn_green(&mut self, f: proc(): Send) {
+        TaskBuilder::new().green(&mut self.thread_pool).spawn(f);
     }
 
     pub fn get(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
@@ -663,7 +681,7 @@ impl Client {
         // TODO: Is "Relaxed" good enough?
         let inner_client =
             self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
-        spawn(proc() {
+        self.spawn_green(proc() {
             let space_cstr = space.to_c_str();
             let key_cstr = key.as_ptr() as *const i8;
             let key_sz = key.len() as u64;
@@ -715,6 +733,55 @@ impl Client {
         return res_rx;
     }
 
+    pub fn put(&mut self, space: String, key: Vec<u8>, value: HyperValue) -> Result<(), HyperError> {
+        self.put_async(space, key, value).recv()
+    }
+
+    pub fn put_async(&mut self, space: String, key: Vec<u8>, value: HyperValue)
+        -> Receiver<Result<(), HyperError>> {
+        let (res_tx, res_rx) = channel();
+        // TODO: Is "Relaxed" good enough?
+        let inner_client =
+            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+        spawn(proc() { unsafe {
+            let space_cstr = space.to_c_str();
+            let key_cstr = key.as_ptr() as *const i8;
+            let key_sz = key.len() as u64;
+            let mut status = 0;
+
+            let arena = hyperdex_ds_arena_create();
+            let (attrs, attrs_sz, _) = match convert_type(arena, value) {
+                Ok(x) => x,
+                Err(err) => panic!(err),
+            };
+
+            let (err_tx, err_rx) = channel();
+
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock();
+                let req_id = 
+                    hyperdex_client_put(inner_client.ptr, space_cstr.as_ptr(), key_cstr, key_sz,
+                                        attrs as *const Struct_hyperdex_client_attribute,
+                                        attrs_sz, &mut status);
+                if req_id < 0 {
+                    return res_tx.send(Err(get_client_error(inner_client.ptr, -1)));
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+
+            let err = err_rx.recv();
+            res_tx.send(if err.status != HYPERDEX_CLIENT_SUCCESS {
+                Err(err)
+            } else if status != HYPERDEX_CLIENT_SUCCESS {
+                Err(get_client_error(inner_client.ptr, status))
+            } else {
+                Ok(())
+            });
+        }});
+        return res_rx;
+    }
+
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
         // let conn_str = conn.to_c_str().as_ptr();
         // let ptr = unsafe { hyperdex_client_create_conn_str(conn_str) };
@@ -729,5 +796,8 @@ impl Client {
         // }
     // }
 
+    pub fn destroy(self) {
+        self.thread_pool.shutdown();
+    }
 }
 

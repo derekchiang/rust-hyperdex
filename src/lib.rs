@@ -2,6 +2,7 @@
 
 extern crate libc;
 extern crate sync;
+extern crate green;
 
 pub mod client;
 pub mod admin;
