@@ -43,5 +43,9 @@ pub unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8>
 }
 
 pub unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
-    String::from_utf8(to_bytes(ptr)).unwrap()  // TODO: better error handling
+    let mut s = String::from_utf8(to_bytes(ptr)).unwrap();  // TODO: better error handling
+    if s.char_at(s.len() - 1) == '\0' {
+        s.pop();
+    }
+    return s;
 }
