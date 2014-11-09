@@ -551,6 +551,8 @@ pub enum HyperValue {
 
 pub type HyperObject = HashMap<String, HyperValue>;
 
+pub type HyperMap = HashMap<HyperValue, HyperValue>;
+
 impl InnerClient {
 
     fn run_forever(&mut self, shutdown_rx: Receiver<()>) {
@@ -618,11 +620,118 @@ pub struct Client {
     inner_clients: Vec<InnerClient>,
 }
 
-// To support asynchronous API, the client spawns a thread for each invocation of the API.
-// However, in the presense of a large number of invocations, we may find ourselves with
-// too many threads.  Thus, the client doesn't spawn real OS thread; rather, it uses green
-// threads, as implemented by crate green.  The green threads are multiplexed to num_cpus()
-// real OS threads.
+macro_rules! make_fn_spacename_key_status_attributes(
+    ($fn_name: ident) => (
+        impl Client {
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
+            unsafe {
+            // TODO: Is "Relaxed" good enough?
+            let inner_client =
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+
+            let space_cstr = space.to_c_str();
+            let key_cstr = key.as_ptr() as *const i8;
+            let key_sz = key.len() as u64;
+            let status_ptr = transmute(box 0u32);
+            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
+            let attrs_sz_ptr = transmute(box 0u32);
+
+            let (err_tx, err_rx) = channel();
+
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock();
+                let req_id = 
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr, space_cstr.as_ptr(),
+                                                               key_cstr, key_sz,
+                                                               status_ptr, attrs_ptr, attrs_sz_ptr);
+                if req_id < 0 {
+                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+
+            Future::from_fn(proc() {
+                let status: Box<u32> = transmute(status_ptr);
+                let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
+                let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
+                let err = err_rx.recv();
+                if err.status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(err)
+                } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr, *status))
+                } else {
+                    match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
+                        Ok(obj) => {
+                            Ok(obj)
+                        },
+                        Err(msg) => {
+                            Err(HyperError {
+                                status: HYPERDEX_CLIENT_SERVERERROR,
+                                message: msg,
+                                location: String::new(),
+                            })
+                        }
+                    }
+                }
+            })
+            }
+        }
+        }
+    );
+)
+
+macro_rules! make_fn_spacename_key_attributes_status(
+    ($fn_name: ident) => (
+        impl Client {
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
+            -> Future<Result<(), HyperError>> { unsafe {
+            // TODO: Is "Relaxed" good enough?
+            let inner_client =
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+
+            let space_cstr = space.to_c_str();
+            let key_cstr = key.as_ptr() as *const i8;
+            let key_sz = key.len() as u64;
+            let status_ptr = transmute(box 0u32);
+
+            let arena = hyperdex_ds_arena_create();
+            let obj = match convert_hyperobject(arena, value) {
+                Ok(x) => x,
+                Err(err) => panic!(err),
+            };
+
+            let (err_tx, err_rx) = channel();
+
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock();
+                let req_id =
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr, space_cstr.as_ptr(), key_cstr, key_sz,
+                              obj.as_ptr(), obj.len() as u64, status_ptr);
+                if req_id < 0 {
+                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+
+            hyperdex_ds_arena_destroy(arena);
+            Future::from_fn(proc() {
+                let err = err_rx.recv();
+                let status: Box<u32> = transmute(status_ptr);
+                if err.status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(err)
+                } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr, *status))
+                } else {
+                    Ok(())
+                }
+            })
+        }}
+        }
+    );
+)
+
 impl Client {
 
     pub fn new(coordinator: SocketAddr) -> Result<Client, String> {
@@ -660,119 +769,6 @@ impl Client {
         })
     }
 
-    pub fn get(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
-        self.get_async(space, key).unwrap()
-    }
-
-    pub fn get_async(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
-        unsafe {
-        // TODO: Is "Relaxed" good enough?
-        let inner_client =
-            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
-
-        let space_cstr = space.to_c_str();
-        let key_cstr = key.as_ptr() as *const i8;
-        let key_sz = key.len() as u64;
-        let status_ptr = transmute(box 0u32);
-        let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
-        let attrs_sz_ptr = transmute(box 0u32);
-
-        let (err_tx, err_rx) = channel();
-
-        let mut ops_mutex = inner_client.ops.clone();
-        {
-            let mut ops = &mut*ops_mutex.lock();
-            let req_id = unsafe {
-                hyperdex_client_get(inner_client.ptr, space_cstr.as_ptr(), key_cstr, key_sz,
-                                    status_ptr, attrs_ptr, attrs_sz_ptr)
-            };
-            if req_id < 0 {
-                unsafe {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
-                }
-            }
-            ops.insert(req_id, HyperStateOp(err_tx));
-        }
-
-        Future::from_fn(proc() {
-            let status: Box<u32> = transmute(status_ptr);
-            let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
-            let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
-            let err = err_rx.recv();
-            if err.status != HYPERDEX_CLIENT_SUCCESS {
-                Err(err)
-            } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                unsafe {
-                    Err(get_client_error(inner_client.ptr, *status))
-                }
-            } else {
-                unsafe {
-                    match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
-                        Ok(obj) => {
-                            Ok(obj)
-                        },
-                        Err(msg) => {
-                            Err(HyperError {
-                                status: HYPERDEX_CLIENT_SERVERERROR,
-                                message: msg,
-                                location: String::new(),
-                            })
-                        }
-                    }
-                }
-            }
-        })
-        }
-    }
-
-    pub fn put(&mut self, space: String, key: Vec<u8>, value: HyperObject) -> Result<(), HyperError> {
-        self.put_async(space, key, value).unwrap()
-    }
-
-    pub fn put_async(&mut self, space: String, key: Vec<u8>, value: HyperObject)
-        -> Future<Result<(), HyperError>> { unsafe {
-        // TODO: Is "Relaxed" good enough?
-        let inner_client =
-            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
-
-        let space_cstr = space.to_c_str();
-        let key_cstr = key.as_ptr() as *const i8;
-        let key_sz = key.len() as u64;
-        let status_ptr = transmute(box 0u32);
-
-        let arena = hyperdex_ds_arena_create();
-        let obj = match convert_hyperobject(arena, value) {
-            Ok(x) => x,
-            Err(err) => panic!(err),
-        };
-
-        let (err_tx, err_rx) = channel();
-
-        let mut ops_mutex = inner_client.ops.clone();
-        {
-            let mut ops = &mut*ops_mutex.lock();
-            let req_id =
-                hyperdex_client_put(inner_client.ptr, space_cstr.as_ptr(), key_cstr, key_sz,
-                                    obj.as_ptr(), obj.len() as u64, status_ptr);
-            if req_id < 0 {
-                return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
-            }
-            ops.insert(req_id, HyperStateOp(err_tx));
-        }
-
-        hyperdex_ds_arena_destroy(arena);
-        Future::from_fn(proc() {
-            let err = err_rx.recv();
-            let status: Box<u32> = transmute(status_ptr);
-            if err.status != HYPERDEX_CLIENT_SUCCESS {
-                Err(err)
-            } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                Err(get_client_error(inner_client.ptr, *status))
-            } else {
-                Ok(())
-            }
-        })
-    }}
 
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
         // let conn_str = conn.to_c_str().as_ptr();
@@ -789,3 +785,24 @@ impl Client {
     // }
 }
 
+make_fn_spacename_key_status_attributes!(get)
+
+make_fn_spacename_key_attributes_status!(put)
+make_fn_spacename_key_attributes_status!(put_if_not_exist)
+make_fn_spacename_key_attributes_status!(atomic_add)
+make_fn_spacename_key_attributes_status!(atomic_sub)
+make_fn_spacename_key_attributes_status!(atomic_mul)
+make_fn_spacename_key_attributes_status!(atomic_div)
+make_fn_spacename_key_attributes_status!(atomic_mod)
+make_fn_spacename_key_attributes_status!(atomic_and)
+make_fn_spacename_key_attributes_status!(atomic_or)
+make_fn_spacename_key_attributes_status!(atomic_xor)
+make_fn_spacename_key_attributes_status!(string_prepend)
+make_fn_spacename_key_attributes_status!(string_append)
+make_fn_spacename_key_attributes_status!(list_lpush)
+make_fn_spacename_key_attributes_status!(list_rpush)
+make_fn_spacename_key_attributes_status!(set_add)
+make_fn_spacename_key_attributes_status!(set_remove)
+make_fn_spacename_key_attributes_status!(set_intersect)
+make_fn_spacename_key_attributes_status!(set_union)
+make_fn_spacename_key_attributes_status!(map_remove)

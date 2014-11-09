@@ -35,7 +35,7 @@ fn test_get_nonexistent_objects() {
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.get(space_name.into_string(), "lol".as_bytes().to_vec()) {
+    match client.get(space_name.into_string(), "lol".as_bytes().to_vec()).unwrap() {
         Ok(obj) => panic!("wrongly getting an object: {}", obj),
         Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
     }
@@ -57,12 +57,12 @@ fn test_add_and_get_objects() {
     value.insert("last".into_string(), HyperString("Chiang".as_bytes().to_vec()));
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.put(space_name.into_string(), key, value) {
+    match client.put(space_name.into_string(), key, value).unwrap() {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
 
-    match client.get(space_name.into_string(), "derek".as_bytes().to_vec()) {
+    match client.get(space_name.into_string(), "derek".as_bytes().to_vec()).unwrap() {
         Ok(mut obj) => {
             let first_str = "first".into_string();
             let last_str = "last".into_string();

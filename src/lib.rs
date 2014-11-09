@@ -1,4 +1,5 @@
 #![feature(globs)]
+#![feature(macro_rules)]
 
 extern crate libc;
 extern crate sync;
