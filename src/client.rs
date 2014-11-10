@@ -503,6 +503,32 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
     }
 }
 
+unsafe fn convert_attributenames(arena: *mut Struct_hyperdex_ds_arena, attrs: Vec<String>)
+    -> Result<Vec<*const i8>, String> {
+    let res = Vec::with_capacity(attrs.len());
+    for attr in attrs.into_iter() {
+        res.push(try!(convert_cstring(arena, attr)));
+    }
+    Ok(res)
+}
+
+unsafe fn convert_predicates(arena: *mut Struct_hyperdex_ds_arena, predicates: Vec<HyperPredicate>)
+    -> Result<Vec<Struct_hyperdex_client_attribute_check>, String> {
+    let res = Vec::with_capacity(predicates.len());
+    for p in predicates.into_iter() {
+        let attr = try!(convert_cstring(arena, p.attr));
+        let (val, val_sz, dt) = try!(convert_type(arena, p.value));
+        res.push(Struct_hyperdex_client_attribute_check {
+            attr: attr,
+            value: val,
+            value_sz: val_sz,
+            datatype: dt,
+            predicate: p.predicate as u32,
+        });
+    }
+    Ok(res)
+}
+
 unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperObject) -> Result<Vec<Struct_hyperdex_client_attribute>, String> {
     let mut attrs = Vec::new();
 
@@ -547,6 +573,48 @@ pub enum HyperValue {
     HyperMapFloatString(HashMap<F64, Vec<u8>>),
     HyperMapFloatInt(HashMap<F64, i64>),
     HyperMapFloatFloat(HashMap<F64, f64>),
+}
+
+pub enum HyperPredicateType {
+	FAIL,
+	EQUALS,
+	LESS_THAN,
+	LESS_EQUAL,
+	GREATER_EQUAL,
+	GREATER_THAN,
+	REGEX,
+	LENGTH_EQUALS,
+	LENGTH_LESS_EQUAL,
+	LENGTH_GREATER_EQUAL,
+	CONTAINS,
+}
+
+impl ToPrimitive for HyperPredicateType {
+    fn to_u64(&self) -> Option<u64> {
+        Some(match self {
+            &FAIL => HYPERPREDICATE_FAIL,
+            &EQUALS => HYPERPREDICATE_EQUALS,
+            &LESS_THAN => HYPERPREDICATE_LESS_THAN,
+            &LESS_EQUAL => HYPERPREDICATE_LESS_EQUAL,
+            &GREATER_EQUAL => HYPERPREDICATE_GREATER_EQUAL,
+            &GREATER_THAN => HYPERPREDICATE_GREATER_THAN,
+            &REGEX => HYPERPREDICATE_REGEX,
+            &LENGTH_EQUALS => HYPERPREDICATE_LENGTH_EQUALS,
+            &LENGTH_LESS_EQUAL => HYPERPREDICATE_LESS_EQUAL,
+            &LENGTH_GREATER_EQUAL => HYPERPREDICATE_GREATER_EQUAL,
+            &CONTAINS => HYPERPREDICATE_CONTAINS,
+        } as u64)
+    }
+
+    fn to_i64(&self) -> Option<i64> {
+        Some(self.to_u64().unwrap() as i64)
+    }
+}
+
+pub struct HyperPredicate {
+    attr: String,
+    value: HyperValue,
+    predicate: HyperPredicateType,
 }
 
 pub type HyperObject = HashMap<String, HyperValue>;
@@ -641,7 +709,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let mut ops_mutex = inner_client.ops.clone();
             {
                 let mut ops = &mut*ops_mutex.lock();
-                let req_id = 
+                let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr, space_cstr.as_ptr(),
                                                                key_cstr, key_sz,
                                                                status_ptr, attrs_ptr, attrs_sz_ptr);
@@ -650,6 +718,80 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
+
+            Future::from_fn(proc() {
+                let status: Box<u32> = transmute(status_ptr);
+                let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
+                let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
+                let err = err_rx.recv();
+                if err.status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(err)
+                } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr, *status))
+                } else {
+                    match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
+                        Ok(obj) => {
+                            Ok(obj)
+                        },
+                        Err(msg) => {
+                            Err(HyperError {
+                                status: HYPERDEX_CLIENT_SERVERERROR,
+                                message: msg,
+                                location: String::new(),
+                            })
+                        }
+                    }
+                }
+            })
+            }
+        }
+        }
+    );
+)
+
+macro_rules! make_fn_spacename_key_attributenames_status_attributes(
+    ($fn_name: ident) => (
+        impl Client {
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>) -> Future<Result<HyperObject, HyperError>> {
+            unsafe {
+            // TODO: Is "Relaxed" good enough?
+            let inner_client =
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+
+            let space_cstr = space.to_c_str();
+            let key_cstr = key.as_ptr() as *const i8;
+            let key_sz = key.len() as u64;
+            let status_ptr = transmute(box 0u32);
+            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
+            let attrs_sz_ptr = transmute(box 0u32);
+
+            let arena = hyperdex_ds_arena_create();
+            let c_attrs = match convert_attributenames(arena, attrs) {
+                Ok(x) => x,
+                Err(err) => return Future::from_value(Err(HyperError {
+                    status: 0,
+                    message: err,
+                    location: String::new(),
+                })),
+            };
+
+            let (err_tx, err_rx) = channel();
+
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock();
+                let req_id =
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr, space_cstr.as_ptr(),
+                                                               key_cstr, key_sz,
+                                                               c_attrs.as_mut_ptr(),
+                                                               c_attrs.len() as u64,
+                                                               status_ptr, attrs_ptr, attrs_sz_ptr);
+                if req_id < 0 {
+                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+            hyperdex_ds_arena_destroy(arena);
 
             Future::from_fn(proc() {
                 let status: Box<u32> = transmute(status_ptr);
@@ -769,6 +911,10 @@ impl Client {
         })
     }
 
+    pub fn search(&mut self, space: String, predicates: Vec<HyperPredicate>)
+        -> Future<Result<Vec<HyperObject>, HyperError>> {
+    }
+
 
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
         // let conn_str = conn.to_c_str().as_ptr();
@@ -786,6 +932,8 @@ impl Client {
 }
 
 make_fn_spacename_key_status_attributes!(get)
+
+make_fn_spacename_key_attributenames_status_attributes!(get_partial)
 
 make_fn_spacename_key_attributes_status!(put)
 make_fn_spacename_key_attributes_status!(put_if_not_exist)
