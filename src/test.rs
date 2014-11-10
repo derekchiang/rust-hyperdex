@@ -134,11 +134,20 @@ fn test_add_and_search_objects() {
         predicate: LESS_EQUAL,
     });
 
-    let res: Vec<Result<HyperObject, HyperError>> =
+    let mut res: Vec<Result<HyperObject, HyperError>> =
         client.search(space_name.into_string(), predicates).iter().collect();
-    println!("res: {}", res);
     assert_eq!(res.len(), 2);
-    println!("lol this actually worked");
+    
+
+    match res.remove(0).unwrap().unwrap().remove(&"age".into_string()).unwrap() {
+        HyperInt(i) => assert_eq!(i, 20),
+        x => panic!(x),
+    }
+
+    match res.remove(0).unwrap().unwrap().remove(&"age".into_string()).unwrap() {
+        HyperInt(i) => assert_eq!(i, 30),
+        x => panic!(x),
+    }
 
     admin.remove_space(space_name.into_string()).recv().unwrap();
 }

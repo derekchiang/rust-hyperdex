@@ -74,9 +74,9 @@ impl Hash for F64 {
 
 #[deriving(Clone)]
 struct SearchState {
-    status: Enum_hyperdex_client_returncode,
-    attrs: *const Struct_hyperdex_client_attribute,
-    attrs_sz: size_t,
+    status: Box<Enum_hyperdex_client_returncode>,
+    attrs: Box<*const Struct_hyperdex_client_attribute>,
+    attrs_sz: Box<size_t>,
     res_tx: Sender<Result<HyperObject, HyperError>>,
 }
 
@@ -624,15 +624,16 @@ impl InnerClient {
                 } else {
                     let mut ops = &mut*self.ops.lock();
                     match ops.find_copy(&reqid) {
-                        None => { panic!("should not happen") },
+                        None => {},  // Is this an error case?  It happens occationally
+
                         Some(HyperStateOp(op_tx)) => {
                             op_tx.send(get_client_error(self.ptr, loop_status));
                             ops.remove(&reqid);
                         },
 
                         Some(HyperStateSearch(state)) => {
-                            if state.status == HYPERDEX_CLIENT_SUCCESS {
-                                match build_hyperobject(state.attrs, state.attrs_sz) {
+                            if *state.status == HYPERDEX_CLIENT_SUCCESS {
+                                match build_hyperobject(*state.attrs, *state.attrs_sz) {
                                     Ok(attrs) => {
                                         state.res_tx.send(Ok(attrs));
                                     },
@@ -645,11 +646,17 @@ impl InnerClient {
                                         state.res_tx.send(Err(herr));
                                     }
                                 }
-                                hyperdex_client_destroy_attrs(state.attrs, state.attrs_sz);
-                            } else if state.status == HYPERDEX_CLIENT_SEARCHDONE {
-                                ops.remove(&reqid);
+                                hyperdex_client_destroy_attrs(*state.attrs, *state.attrs_sz);
+                            } else if *state.status == HYPERDEX_CLIENT_SEARCHDONE {
+                                match ops.remove(&reqid) {
+                                    Some(HyperStateSearch(state)) => state,
+                                    x => panic!(x),
+                                };
+                                let res_tx = state.res_tx;
+                                // this seems to be a bug in Rust... state.res_tx sometimes
+                                // doesn't get dropped properly
                             } else {
-                                state.res_tx.send(Err(get_client_error(self.ptr, state.status)));
+                                state.res_tx.send(Err(get_client_error(self.ptr, *state.status)));
                             }
                         },
                     }
@@ -920,12 +927,9 @@ impl Client {
                 },
             };
 
-            let mut state = SearchState {
-                status: 0,
-                attrs: null(),
-                attrs_sz: 0,
-                res_tx: res_tx.clone() ,
-            };
+            let status_ptr = transmute(box 0u32);
+            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
+            let attrs_sz_ptr = transmute(box 0u32);
 
             let mut ops_mutex = inner_client.ops.clone();
             {
@@ -935,12 +939,18 @@ impl Client {
                                            space.as_ptr() as *const i8,
                                            checks.as_ptr(),
                                            checks.len() as u64,
-                                           &mut state.status,
-                                           &mut state.attrs, &mut state.attrs_sz);
+                                           status_ptr, attrs_ptr, attrs_sz_ptr);
                 if req_id < 0 {
                     res_tx.send(Err(get_client_error(inner_client.ptr, 0)));
                     return res_rx;
                 }
+
+                let mut state = SearchState {
+                    status: transmute(status_ptr),
+                    attrs: transmute(attrs_ptr),
+                    attrs_sz: transmute(attrs_sz_ptr),
+                    res_tx: res_tx,
+                };
 
                 ops.insert(req_id, HyperStateSearch(state));
             }
