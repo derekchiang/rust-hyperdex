@@ -1,8 +1,9 @@
+use std::mem::transmute;
 use std::io::timer::{sleep, Timer};
 use std::io::net::ip::SocketAddr;
 use std::time::duration::Duration;
 use std::sync::Future;
-
+use std::ptr::null;
 
 use libc::*;
 
@@ -18,7 +19,7 @@ pub struct Admin {
 
 pub struct AdminRequest {
     id: int64_t,
-    status: *mut u32,
+    status: Box<u32>,
     success: Option<proc(): Send>,
     failure: Option<proc(err: HyperError): Send>,
 }
@@ -128,34 +129,84 @@ impl Admin {
 
     fn add_or_remove_space(&self, desc: String, func: &str) -> Receiver<Result<(), HyperError>> {
         unsafe {
-            let mut status = 0;
+            let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "add" => {
                     hyperdex_admin_add_space(self.ptr,
                                              desc.as_bytes().as_ptr() as *const i8,
-                                             &mut status)
+                                             status_ptr)
                 },
                 "remove" => {
                     hyperdex_admin_rm_space(self.ptr,
                                             desc.as_bytes().as_ptr() as *const i8,
-                                            &mut status)
+                                            status_ptr)
                 },
                 _ => {
                     panic!("wrong func name");
                 }
             };
             if req_id == -1 {
-                res_tx.send(Err(get_admin_error(self.ptr, status)));
+                res_tx.send(Err(get_admin_error(self.ptr, *status_ptr)));
                 return res_rx;
             }
 
             let res_tx2 = res_tx.clone();
             let req = AdminRequest {
                 id: req_id,
-                status: &mut status,
+                status: transmute(status_ptr),
                 success: Some(proc() {
                     res_tx.send(Ok(()));
+                }),
+                failure: Some(proc(err: HyperError) {
+                    res_tx2.send(Err(err));
+                }),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx
+        }
+    }
+
+    pub fn dump_config(&self, desc: String) -> Receiver<Result<String, HyperError>> {
+        self.dump_config_or_list_spaces("dump_config")
+    }
+
+    pub fn list_spaces(&self, desc: String) -> Receiver<Result<String, HyperError>> {
+        self.dump_config_or_list_spaces("list_spaces")
+    }
+
+    fn dump_config_or_list_spaces(&self, func: &str) -> Receiver<Result<String, HyperError>> {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+            let mut res_ptr = transmute(box null::<*const i8>());
+
+            let (res_tx, res_rx) = channel();
+            let req_id = match func {
+                "dump_config" => {
+                    hyperdex_admin_dump_config(self.ptr, status_ptr, res_ptr)
+                },
+                "list_spaces" => {
+                    hyperdex_admin_list_spaces(self.ptr, status_ptr, res_ptr)
+                },
+                _ => {
+                    panic!("wrong func name");
+                }
+            };
+            if req_id == -1 {
+                res_tx.send(Err(get_admin_error(self.ptr, *status_ptr)));
+                return res_rx;
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(proc() {
+                    let res_box: Box<*const i8> = transmute(res_ptr);
+                    let res = to_string(*res_box);
+                    res_tx.send(Ok(res));
                 }),
                 failure: Some(proc(err: HyperError) {
                     res_tx2.send(Err(err));

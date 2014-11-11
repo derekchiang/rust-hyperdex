@@ -16,75 +16,75 @@ subspace first, last
 create 8 partitions
 tolerate 2 failures";
 
-// #[test]
-// fn test_add_and_rm_space() {
-    // let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
-    // match admin.add_space(space_desc.into_string()).recv() {
-        // Ok(()) => (),
-        // Err(err) => panic!(format!("{}", err)),
-    // };
+#[test]
+fn test_add_and_rm_space() {
+    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    match admin.add_space(space_desc.into_string()).recv() {
+        Ok(()) => (),
+        Err(err) => panic!(format!("{}", err)),
+    };
 
-    // admin.remove_space(space_name.into_string()).recv().unwrap();
-// }
+    admin.remove_space(space_name.into_string()).recv().unwrap();
+}
 
-// #[test]
-// fn test_get_nonexistent_objects() {
-    // let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
-    // match admin.add_space(space_desc.into_string()).recv() {
-        // Ok(()) => (),
-        // Err(err) => panic!(format!("{}", err)),
-    // };
+#[test]
+fn test_get_nonexistent_objects() {
+    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    match admin.add_space(space_desc.into_string()).recv() {
+        Ok(()) => (),
+        Err(err) => panic!(format!("{}", err)),
+    };
 
-    // let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    // match client.get(space_name.into_string(), "lol".as_bytes().to_vec()).unwrap() {
-        // Ok(obj) => panic!("wrongly getting an object: {}", obj),
-        // Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
-    // }
+    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    match client.get(space_name.into_string(), "lol".as_bytes().to_vec()).unwrap() {
+        Ok(obj) => panic!("wrongly getting an object: {}", obj),
+        Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
+    }
 
-    // admin.remove_space(space_name.into_string()).recv().unwrap();
-// }
+    admin.remove_space(space_name.into_string()).recv().unwrap();
+}
 
-// #[test]
-// fn test_add_and_get_objects() {
-    // let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
-    // match admin.add_space(space_desc.into_string()).recv() {
-        // Ok(()) => (),
-        // Err(err) => panic!(format!("{}", err)),
-    // };
+#[test]
+fn test_add_and_get_objects() {
+    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    match admin.add_space(space_desc.into_string()).recv() {
+        Ok(()) => (),
+        Err(err) => panic!(format!("{}", err)),
+    };
 
-    // let key = "derek".as_bytes().to_vec();
-    // let mut value = HashMap::new();
-    // value.insert("first".into_string(), HyperString("Derek".as_bytes().to_vec()));
-    // value.insert("last".into_string(), HyperString("Chiang".as_bytes().to_vec()));
+    let key = "derek".as_bytes().to_vec();
+    let mut value = HashMap::new();
+    value.insert("first".into_string(), HyperString("Derek".as_bytes().to_vec()));
+    value.insert("last".into_string(), HyperString("Chiang".as_bytes().to_vec()));
 
-    // let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    // match client.put(space_name.into_string(), key, value).unwrap() {
-        // Ok(()) => (),
-        // Err(err) => panic!("{}", err),
-    // }
+    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    match client.put(space_name.into_string(), key, value).unwrap() {
+        Ok(()) => (),
+        Err(err) => panic!("{}", err),
+    }
 
-    // match client.get(space_name.into_string(), "derek".as_bytes().to_vec()).unwrap() {
-        // Ok(mut obj) => {
-            // let first_str = "first".into_string();
-            // let last_str = "last".into_string();
-            // let first = match obj.find_copy(&first_str).unwrap() {
-                // HyperString(s) => s,
-                // x => panic!(x),
-            // };
+    match client.get(space_name.into_string(), "derek".as_bytes().to_vec()).unwrap() {
+        Ok(mut obj) => {
+            let first_str = "first".into_string();
+            let last_str = "last".into_string();
+            let first = match obj.find_copy(&first_str).unwrap() {
+                HyperString(s) => s,
+                x => panic!(x),
+            };
 
-            // let last = match obj.find_copy(&last_str).unwrap() {
-                // HyperString(s) => s,
-                // x => panic!(x),
-            // };
+            let last = match obj.find_copy(&last_str).unwrap() {
+                HyperString(s) => s,
+                x => panic!(x),
+            };
 
-            // assert_eq!(first, "Derek".as_bytes().to_vec());
-            // assert_eq!(last, "Chiang".as_bytes().to_vec());
-        // },
-        // Err(err) => panic!(err),
-    // }
+            assert_eq!(first, "Derek".as_bytes().to_vec());
+            assert_eq!(last, "Chiang".as_bytes().to_vec());
+        },
+        Err(err) => panic!(err),
+    }
 
-    // admin.remove_space(space_name.into_string()).recv().unwrap();
-// }
+    admin.remove_space(space_name.into_string()).recv().unwrap();
+}
 
 #[test]
 fn test_add_and_search_objects() {
@@ -134,17 +134,14 @@ fn test_add_and_search_objects() {
         predicate: LESS_EQUAL,
     });
 
-    let mut res: Vec<Result<HyperObject, HyperError>> =
-        client.search(space_name.into_string(), predicates).iter().collect();
-    assert_eq!(res.len(), 2);
-    
+    let res = client.search(space_name.into_string(), predicates);
 
-    match res.remove(0).unwrap().unwrap().remove(&"age".into_string()).unwrap() {
+    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
         HyperInt(i) => assert_eq!(i, 20),
         x => panic!(x),
     }
 
-    match res.remove(0).unwrap().unwrap().remove(&"age".into_string()).unwrap() {
+    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
         HyperInt(i) => assert_eq!(i, 30),
         x => panic!(x),
     }
