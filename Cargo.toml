@@ -1,5 +1,6 @@
 [package]
 
-name = "rust-hyperdex"
+name = "rust_hyperdex"
 version = "0.0.1"
 authors = ["Derek Chiang <derekchiang93@gmail.com>"]
+
