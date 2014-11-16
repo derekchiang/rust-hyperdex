@@ -8,7 +8,7 @@ extern crate green;
 
 pub use common::HyperError;
 pub use client::Client;
-pub use client_types::{HyperObject, HyperMap, HyperPredicate, HyperPredicateType, HyperValue, F64, ToHyperValue};
+pub use client_types::*;
 pub use admin::Admin;
 
 mod client;

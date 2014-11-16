@@ -82,6 +82,95 @@ impl ToHyperValue for Vec<f64> {
     }
 }
 
+impl<'a> ToHyperValue for TreeSet<&'a str> {
+    fn to_hyper(self) -> HyperValue {
+        HyperSetString(FromIterator::from_iter(self.into_iter().map(|s| {
+            s.as_bytes().to_vec()
+        })))
+    }
+}
+
+
+impl ToHyperValue for TreeSet<String> {
+    fn to_hyper(self) -> HyperValue {
+        HyperSetString(FromIterator::from_iter(self.into_iter().map(|s| {
+            s.into_bytes()
+        })))
+    }
+}
+
+impl ToHyperValue for TreeSet<Vec<u8>> {
+    fn to_hyper(self) -> HyperValue {
+        HyperSetString(self)
+    }
+}
+
+impl ToHyperValue for TreeSet<i64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperSetInt(self)
+    }
+}
+
+impl ToHyperValue for TreeSet<F64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperSetFloat(self)
+    }
+}
+
+impl ToHyperValue for HashMap<Vec<u8>, Vec<u8>> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapStringString(self)
+    }
+}
+
+impl ToHyperValue for HashMap<Vec<u8>, i64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapStringInt(self)
+    }
+}
+
+impl ToHyperValue for HashMap<Vec<u8>, f64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapStringFloat(self)
+    }
+}
+
+impl ToHyperValue for HashMap<i64, Vec<u8>> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapIntString(self)
+    }
+}
+
+impl ToHyperValue for HashMap<i64, i64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapIntInt(self)
+    }
+}
+
+impl ToHyperValue for HashMap<i64, f64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapIntFloat(self)
+    }
+}
+
+impl ToHyperValue for HashMap<F64, Vec<u8>> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapFloatString(self)
+    }
+}
+
+impl ToHyperValue for HashMap<F64, i64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapFloatInt(self)
+    }
+}
+
+impl ToHyperValue for HashMap<F64, f64> {
+    fn to_hyper(self) -> HyperValue {
+        HyperMapFloatFloat(self)
+    }
+}
+
 /// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
 /// by wrapping them in a struct and implement those traits
 #[deriving(Show, Clone)]
