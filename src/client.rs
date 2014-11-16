@@ -841,7 +841,6 @@ impl Client {
 
     pub fn search(&mut self, space: String, predicates: Vec<HyperPredicate>)
         -> Receiver<Result<HyperObject, HyperError>> { unsafe {
-            // TODO: Is "Relaxed" good enough?
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
 
@@ -890,6 +889,53 @@ impl Client {
             hyperdex_ds_arena_destroy(arena);
             return res_rx;
         }
+    }
+
+    pub fn map_add(&mut self, space: String, key: String, mapattrs: Vec<HyperMapAttribute>)
+        -> Future<Result<(), HyperError>> { unsafe {
+        let inner_client =
+            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+
+        let key_cstr = key.as_ptr() as *const i8;
+        let key_sz = key.len() as u64;
+
+        let status_ptr = transmute(box 0u32);
+
+        let arena = hyperdex_ds_arena_create();
+        let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
+            Ok(x) => x,
+            Err(err) => panic!(err),
+        };
+
+        let (err_tx, err_rx) = channel();
+
+        let mut ops_mutex = inner_client.ops.clone();
+        {
+            let mut ops = &mut*ops_mutex.lock();
+            let req_id =
+                hyperdex_client_map_add(inner_client.ptr,
+                                        space.as_ptr() as *const i8,
+                                        key_cstr, key_sz,
+                                        c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
+                                        status_ptr);
+            if req_id < 0 {
+                return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+            }
+            ops.insert(req_id, HyperStateOp(err_tx));
+        }
+
+        hyperdex_ds_arena_destroy(arena);
+        Future::from_fn(proc() {
+            let err = err_rx.recv();
+            let status: Box<u32> = transmute(status_ptr);
+            if err.status != HYPERDEX_CLIENT_SUCCESS {
+                Err(err)
+            } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                Err(get_client_error(inner_client.ptr, *status))
+            } else {
+                Ok(())
+            }
+        })}
     }
 
 
