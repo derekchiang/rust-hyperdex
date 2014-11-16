@@ -1,3 +1,5 @@
+#![macro_escape]
+
 use std::io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
 use std::comm::{Empty, Disconnected};
@@ -21,82 +23,11 @@ use sync::{Arc, Mutex};
 
 use libc::*;
 
-use super::*;
 use common::*;
 use hyperdex::*;
 use hyperdex_client::*;
 use hyperdex_datastructures::*;
-
-/// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
-/// by wrapping them in a struct and implement those traits
-#[deriving(Show, Clone)]
-pub struct F64(f64);
-
-impl PartialEq for F64 {
-    fn eq(&self, other: &F64) -> bool {
-        if self == other {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl PartialOrd for F64 {
-    fn partial_cmp(&self, other: &F64) -> Option<Ordering> {
-        // Kinda hacky, but I think this should work...
-        if self > other {
-            Some(Greater)
-        } else if self < other {
-            Some(Less)
-        } else {
-            Some(Equal)
-        }
-    }
-}
-
-impl Eq for F64 {}
-
-impl Ord for F64 {
-    fn cmp(&self, other: &F64) -> Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl Hash for F64 {
-    fn hash(&self, state: &mut SipState) {
-        unsafe {
-            let x: u64 = transmute(self);
-            x.hash(state);
-        }
-    }
-}
-
-#[deriving(Clone)]
-struct SearchState {
-    status: Box<Enum_hyperdex_client_returncode>,
-    attrs: Box<*const Struct_hyperdex_client_attribute>,
-    attrs_sz: Box<size_t>,
-    res_tx: Sender<Result<HyperObject, HyperError>>,
-}
-
-#[deriving(Clone)]
-enum HyperState {
-    HyperStateOp(Sender<HyperError>),  // for calls that don't return values
-    HyperStateSearch(SearchState),  // for calls that do return values
-}
-
-struct Request {
-    id: int64_t,
-    confirm_tx: Sender<bool>,
-}
-
-#[deriving(Clone)]
-struct InnerClient {
-    ptr: *mut Struct_hyperdex_client,
-    ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
-    err_tx: Sender<HyperError>,
-}
+use client_types::*;
 
 unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
     let mut attrs = HashMap::new();
@@ -427,6 +358,26 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
     return Ok(attrs);
 }
 
+unsafe fn convert_map_attributes(arena: *mut Struct_hyperdex_ds_arena, mapattrs: Vec<HyperMapAttribute>)
+    -> Result<Vec<Struct_hyperdex_client_map_attribute>, String> {
+    let mut c_mapattrs = Vec::with_capacity(mapattrs.len());
+    for mapattr in mapattrs.into_iter() {
+        let attr = try!(convert_cstring(arena, mapattr.attr));
+        let (key_ptr, key_sz, key_ty) = try!(convert_type(arena, mapattr.key));
+        let (val_ptr, val_sz, val_ty) = try!(convert_type(arena, mapattr.value));
+        c_mapattrs.push(Struct_hyperdex_client_map_attribute {
+            attr: attr,
+            map_key: key_ptr,
+            map_key_sz: key_sz,
+            map_key_datatype: key_ty,
+            value: val_ptr,
+            value_sz: val_sz,
+            value_datatype: val_ty,
+        });
+    }
+    Ok(c_mapattrs)
+}
+
 unsafe fn convert_cstring(arena: *mut Struct_hyperdex_ds_arena, s: String) -> Result<*const i8, String> {
     let cstr = s.to_c_str();
     let mut err = 0;
@@ -547,56 +498,38 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
     Ok(attrs)
 }
 
-#[deriving(Show, Clone)]
-pub enum HyperValue {
-    HyperString(Vec<u8>),
-    HyperInt(i64),
-    HyperFloat(f64),
+#[macro_export]
+macro_rules! NewHyperObject(
+    ($($key: expr: $value: expr,)*) => (
+        {
+            use std::collections::HashMap;
+            let mut obj = HashMap::new();
+            $(
+                obj.insert($key.into_string(), $value.to_hyper());
+            )*
+            obj
+        }
+    );
+)
 
-    HyperListString(Vec<Vec<u8>>),
-    HyperListInt(Vec<i64>),
-    HyperListFloat(Vec<f64>),
+#[macro_export]
+macro_rules! NewHyperMapAttribute(
+    ($attr: expr, $key: expr, $value: expr) => (
+        HyperMapAttribute {
+            attr: $attr.into_string(),
+            key: $key.to_hyper(),
+            value: $value.to_hyper(),
+        }
+    );
+)
 
-    HyperSetString(TreeSet<Vec<u8>>),
-    HyperSetInt(TreeSet<i64>),
-    HyperSetFloat(TreeSet<F64>),
-
-    HyperMapStringString(HashMap<Vec<u8>, Vec<u8>>),
-    HyperMapStringInt(HashMap<Vec<u8>, i64>),
-    HyperMapStringFloat(HashMap<Vec<u8>, f64>),
-
-    HyperMapIntString(HashMap<i64, Vec<u8>>),
-    HyperMapIntInt(HashMap<i64, i64>),
-    HyperMapIntFloat(HashMap<i64, f64>),
-
-    HyperMapFloatString(HashMap<F64, Vec<u8>>),
-    HyperMapFloatInt(HashMap<F64, i64>),
-    HyperMapFloatFloat(HashMap<F64, f64>),
+#[deriving(Clone)]
+pub struct InnerClient {
+    ptr: *mut Struct_hyperdex_client,
+    ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
+    err_tx: Sender<HyperError>,
 }
 
-pub enum HyperPredicateType {
-	FAIL = HYPERPREDICATE_FAIL as int,
-	EQUALS = HYPERPREDICATE_EQUALS as int,
-	LESS_THAN = HYPERPREDICATE_LESS_THAN as int,
-	LESS_EQUAL = HYPERPREDICATE_LESS_EQUAL as int,
-	GREATER_EQUAL = HYPERPREDICATE_GREATER_EQUAL as int,
-	GREATER_THAN = HYPERPREDICATE_GREATER_THAN as int,
-	REGEX = HYPERPREDICATE_REGEX as int,
-	LENGTH_EQUALS = HYPERPREDICATE_LENGTH_EQUALS as int,
-	LENGTH_LESS_EQUAL = HYPERPREDICATE_LENGTH_LESS_EQUAL as int,
-	LENGTH_GREATER_EQUAL = HYPERPREDICATE_LENGTH_GREATER_EQUAL as int,
-	CONTAINS = HYPERPREDICATE_CONTAINS as int,
-}
-
-pub struct HyperPredicate {
-    pub attr: String,
-    pub value: HyperValue,
-    pub predicate: HyperPredicateType,
-}
-
-pub type HyperObject = HashMap<String, HyperValue>;
-
-pub type HyperMap = HashMap<HyperValue, HyperValue>;
 
 impl InnerClient {
 
@@ -664,12 +597,6 @@ impl InnerClient {
             }
         }
     }
-}
-
-pub struct Client {
-    counter: AtomicInt,
-    shutdown_txs: Vec<Sender<()>>,
-    inner_clients: Vec<InnerClient>,
 }
 
 macro_rules! make_fn_spacename_key_status_attributes(
@@ -868,6 +795,12 @@ macro_rules! make_fn_spacename_key_attributes_status(
         }
     );
 )
+
+pub struct Client {
+    counter: AtomicInt,
+    shutdown_txs: Vec<Sender<()>>,
+    inner_clients: Vec<InnerClient>,
+}
 
 impl Client {
 

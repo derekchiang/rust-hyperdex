@@ -7,7 +7,6 @@ use std::ptr::null;
 
 use libc::*;
 
-use super::*;
 use common::*;
 use hyperdex::*;
 use hyperdex_admin::*;
