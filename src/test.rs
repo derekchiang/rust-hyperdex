@@ -17,15 +17,6 @@ create 8 partitions
 tolerate 2 failures";
 
 #[test]
-fn test_whatever() {
-    let mut obj = NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
-    );
-    println!("{}", obj);
-}
-
-#[test]
 fn test_add_and_rm_space() {
     let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
     match admin.add_space(space_desc.into_string()).recv() {
@@ -45,7 +36,7 @@ fn test_get_nonexistent_objects() {
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.get(space_name.into_string(), "lol".as_bytes().to_vec()).unwrap() {
+    match client.get(space_name.into_string(), "lol".as_bytes().to_vec()) {
         Ok(obj) => panic!("wrongly getting an object: {}", obj),
         Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
     }
@@ -68,12 +59,12 @@ fn test_add_and_get_objects() {
     );
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.put(space_name.into_string(), key, value).unwrap() {
+    match client.put(space_name.into_string(), key, value) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
 
-    match client.get(space_name.into_string(), "derek".as_bytes().to_vec()).unwrap() {
+    match client.get(space_name.into_string(), "derek".as_bytes().to_vec()) {
         Ok(mut obj) => {
             let first_str = "first".into_string();
             let last_str = "last".into_string();
@@ -127,15 +118,15 @@ fn test_add_and_search_objects() {
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
 
-    match client.put(space_name.into_string(), k1, v1).unwrap() {
+    match client.put(space_name.into_string(), k1, v1) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
-    match client.put(space_name.into_string(), k2, v2).unwrap() {
+    match client.put(space_name.into_string(), k2, v2) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
-    match client.put(space_name.into_string(), k3, v3).unwrap() {
+    match client.put(space_name.into_string(), k3, v3) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }

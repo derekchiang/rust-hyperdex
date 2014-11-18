@@ -600,9 +600,9 @@ impl InnerClient {
 }
 
 macro_rules! make_fn_spacename_key_status_attributes(
-    ($fn_name: ident) => (
+    ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
+        pub fn $async_name(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -660,14 +660,18 @@ macro_rules! make_fn_spacename_key_status_attributes(
             })
             }
         }
+
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
+            self.$async_name(space, key).unwrap()
+        }
         }
     );
 )
 
 macro_rules! make_fn_spacename_key_attributenames_status_attributes(
-    ($fn_name: ident) => (
+    ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>) -> Future<Result<HyperObject, HyperError>> {
+        pub fn $async_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>) -> Future<Result<HyperObject, HyperError>> {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -738,14 +742,19 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             })
             }
         }
+
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>)
+            -> Result<HyperObject, HyperError> {
+            self.$async_name(space, key, attrs).unwrap()
+        }
         }
     );
 )
 
 macro_rules! make_fn_spacename_key_attributes_status(
-    ($fn_name: ident) => (
+    ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
+        pub fn $async_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
             -> Future<Result<(), HyperError>> { unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -792,6 +801,11 @@ macro_rules! make_fn_spacename_key_attributes_status(
                 }
             })
         }}
+
+        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
+            -> Result<(), HyperError> {
+            self.$async_name(space, key, value).unwrap()
+        }
         }
     );
 )
@@ -954,26 +968,26 @@ impl Client {
     // }
 }
 
-make_fn_spacename_key_status_attributes!(get)
+make_fn_spacename_key_status_attributes!(get, async_get)
 
-make_fn_spacename_key_attributenames_status_attributes!(get_partial)
+make_fn_spacename_key_attributenames_status_attributes!(get_partial, async_get_partial)
 
-make_fn_spacename_key_attributes_status!(put)
-make_fn_spacename_key_attributes_status!(put_if_not_exist)
-make_fn_spacename_key_attributes_status!(atomic_add)
-make_fn_spacename_key_attributes_status!(atomic_sub)
-make_fn_spacename_key_attributes_status!(atomic_mul)
-make_fn_spacename_key_attributes_status!(atomic_div)
-make_fn_spacename_key_attributes_status!(atomic_mod)
-make_fn_spacename_key_attributes_status!(atomic_and)
-make_fn_spacename_key_attributes_status!(atomic_or)
-make_fn_spacename_key_attributes_status!(atomic_xor)
-make_fn_spacename_key_attributes_status!(string_prepend)
-make_fn_spacename_key_attributes_status!(string_append)
-make_fn_spacename_key_attributes_status!(list_lpush)
-make_fn_spacename_key_attributes_status!(list_rpush)
-make_fn_spacename_key_attributes_status!(set_add)
-make_fn_spacename_key_attributes_status!(set_remove)
-make_fn_spacename_key_attributes_status!(set_intersect)
-make_fn_spacename_key_attributes_status!(set_union)
-make_fn_spacename_key_attributes_status!(map_remove)
+make_fn_spacename_key_attributes_status!(put, async_put)
+make_fn_spacename_key_attributes_status!(put_if_not_exist, async_put_if_not_exist)
+make_fn_spacename_key_attributes_status!(atomic_add, async_atomic_add)
+make_fn_spacename_key_attributes_status!(atomic_sub, async_atomic_sub)
+make_fn_spacename_key_attributes_status!(atomic_mul, async_atomic_mul)
+make_fn_spacename_key_attributes_status!(atomic_div, async_atomic_div)
+make_fn_spacename_key_attributes_status!(atomic_mod, async_atomic_mod)
+make_fn_spacename_key_attributes_status!(atomic_and, async_atomic_and)
+make_fn_spacename_key_attributes_status!(atomic_or, async_atomic_or)
+make_fn_spacename_key_attributes_status!(atomic_xor, async_atomic_xor)
+make_fn_spacename_key_attributes_status!(string_prepend, async_string_prepend)
+make_fn_spacename_key_attributes_status!(string_append, async_string_append)
+make_fn_spacename_key_attributes_status!(list_lpush, async_list_lpush)
+make_fn_spacename_key_attributes_status!(list_rpush, async_list_rpush)
+make_fn_spacename_key_attributes_status!(set_add, async_set_add)
+make_fn_spacename_key_attributes_status!(set_remove, async_set_remove)
+make_fn_spacename_key_attributes_status!(set_intersect, async_set_intersect)
+make_fn_spacename_key_attributes_status!(set_union, async_set_union)
+make_fn_spacename_key_attributes_status!(map_remove, async_map_remove)
