@@ -118,27 +118,35 @@ impl Admin {
         }
     }
 
-    pub fn add_space(&self, desc: String) -> Receiver<Result<(), HyperError>> {
-        self.add_or_remove_space(desc, "add")
+    pub fn add_space(&self, desc: &str) -> Result<(), HyperError> {
+        self.async_add_space(desc).unwrap()
     }
 
-    pub fn remove_space(&self, desc: String) -> Receiver<Result<(), HyperError>> {
-        self.add_or_remove_space(desc, "remove")
+    pub fn async_add_space(&self, desc: &str) -> Future<Result<(), HyperError>> {
+        self.async_add_or_remove_space(desc, "add")
     }
 
-    fn add_or_remove_space(&self, desc: String, func: &str) -> Receiver<Result<(), HyperError>> {
+    pub fn remove_space(&self, desc: &str) -> Result<(), HyperError> {
+        self.async_remove_space(desc).unwrap()
+    }
+
+    pub fn async_remove_space(&self, desc: &str) -> Future<Result<(), HyperError>> {
+        self.async_add_or_remove_space(desc, "remove")
+    }
+
+    fn async_add_or_remove_space(&self, desc: &str, func: &str) -> Future<Result<(), HyperError>> {
         unsafe {
             let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "add" => {
                     hyperdex_admin_add_space(self.ptr,
-                                             desc.as_bytes().as_ptr() as *const i8,
+                                             desc.into_string().as_ptr() as *const i8,
                                              status_ptr)
                 },
                 "remove" => {
                     hyperdex_admin_rm_space(self.ptr,
-                                            desc.as_bytes().as_ptr() as *const i8,
+                                            desc.into_string().as_ptr() as *const i8,
                                             status_ptr)
                 },
                 _ => {
@@ -146,8 +154,7 @@ impl Admin {
                 }
             };
             if req_id == -1 {
-                res_tx.send(Err(get_admin_error(self.ptr, *status_ptr)));
-                return res_rx;
+                return Future::from_value(Err(get_admin_error(self.ptr, *status_ptr)))
             }
 
             let res_tx2 = res_tx.clone();
@@ -164,19 +171,29 @@ impl Admin {
 
             self.req_tx.send(req);
 
-            res_rx
+            Future::from_fn(proc() {
+                res_rx.recv()
+            })
         }
     }
 
-    pub fn dump_config(&self, desc: String) -> Receiver<Result<String, HyperError>> {
-        self.dump_config_or_list_spaces("dump_config")
+    pub fn dump_config(&self) -> Result<String, HyperError> {
+        self.async_dump_config().unwrap()
     }
 
-    pub fn list_spaces(&self, desc: String) -> Receiver<Result<String, HyperError>> {
-        self.dump_config_or_list_spaces("list_spaces")
+    pub fn async_dump_config(&self) -> Future<Result<String, HyperError>> {
+        self.async_dump_config_or_list_spaces("dump_config")
     }
 
-    fn dump_config_or_list_spaces(&self, func: &str) -> Receiver<Result<String, HyperError>> {
+    pub fn list_spaces(&self) -> Result<String, HyperError> {
+        self.async_list_spaces().unwrap()
+    }
+
+    pub fn async_list_spaces(&self) -> Future<Result<String, HyperError>> {
+        self.async_dump_config_or_list_spaces("list_spaces")
+    }
+
+    fn async_dump_config_or_list_spaces(&self, func: &str) -> Future<Result<String, HyperError>> {
         unsafe {
             let mut status_ptr = transmute(box 0u32);
             let mut res_ptr = transmute(box null::<*const i8>());
@@ -194,8 +211,7 @@ impl Admin {
                 }
             };
             if req_id == -1 {
-                res_tx.send(Err(get_admin_error(self.ptr, *status_ptr)));
-                return res_rx;
+                return Future::from_value(Err(get_admin_error(self.ptr, *status_ptr)));
             }
 
             let res_tx2 = res_tx.clone();
@@ -214,7 +230,9 @@ impl Admin {
 
             self.req_tx.send(req);
 
-            res_rx
+            Future::from_fn(proc() {
+                res_rx.recv()
+            })
         }
     }
 }

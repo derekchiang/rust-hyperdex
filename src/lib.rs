@@ -4,7 +4,6 @@
 
 extern crate libc;
 extern crate sync;
-extern crate green;
 
 pub use common::HyperError;
 pub use client::Client;

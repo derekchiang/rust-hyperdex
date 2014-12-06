@@ -28,6 +28,8 @@ use hyperdex::*;
 use hyperdex_client::*;
 use hyperdex_datastructures::*;
 use client_types::*;
+use client_types::HyperValue::*;
+use client_types::HyperState::*;
 
 unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
     let mut attrs = HashMap::new();
@@ -602,7 +604,7 @@ impl InnerClient {
 macro_rules! make_fn_spacename_key_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $async_name(&mut self, space: String, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
+        pub fn $async_name(&mut self, space: &str, key: Vec<u8>) -> Future<Result<HyperObject, HyperError>> {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -623,7 +625,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.as_ptr() as *const i8,
+                                                               space.into_string().as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                status_ptr, attrs_ptr, attrs_sz_ptr);
                 if req_id < 0 {
@@ -661,7 +663,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
             }
         }
 
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>) -> Result<HyperObject, HyperError> {
+        pub fn $fn_name(&mut self, space: &str, key: Vec<u8>) -> Result<HyperObject, HyperError> {
             self.$async_name(space, key).unwrap()
         }
         }
@@ -671,7 +673,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
 macro_rules! make_fn_spacename_key_attributenames_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $async_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>) -> Future<Result<HyperObject, HyperError>> {
+        pub fn $async_name(&mut self, space: &str, key: Vec<u8>, attrs: Vec<String>) -> Future<Result<HyperObject, HyperError>> {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -702,7 +704,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.as_ptr() as *const i8,
+                                                               space.into_string().as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
@@ -743,7 +745,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             }
         }
 
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, attrs: Vec<String>)
+        pub fn $fn_name(&mut self, space: &str, key: Vec<u8>, attrs: Vec<String>)
             -> Result<HyperObject, HyperError> {
             self.$async_name(space, key, attrs).unwrap()
         }
@@ -754,7 +756,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
 macro_rules! make_fn_spacename_key_attributes_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
-        pub fn $async_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
+        pub fn $async_name(&mut self, space: &str, key: Vec<u8>, value: HyperObject)
             -> Future<Result<(), HyperError>> { unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
@@ -778,7 +780,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.as_ptr() as *const i8,
+                                                               space.into_string().as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                obj.as_ptr(), obj.len() as u64,
                                                                status_ptr);
@@ -802,7 +804,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
             })
         }}
 
-        pub fn $fn_name(&mut self, space: String, key: Vec<u8>, value: HyperObject)
+        pub fn $fn_name(&mut self, space: &str, key: Vec<u8>, value: HyperObject)
             -> Result<(), HyperError> {
             self.$async_name(space, key, value).unwrap()
         }
@@ -853,7 +855,7 @@ impl Client {
         })
     }
 
-    pub fn search(&mut self, space: String, predicates: Vec<HyperPredicate>)
+    pub fn search(&mut self, space: &str, predicates: Vec<HyperPredicate>)
         -> Receiver<Result<HyperObject, HyperError>> { unsafe {
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
@@ -882,7 +884,7 @@ impl Client {
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     hyperdex_client_search(inner_client.ptr,
-                                           space.as_ptr() as *const i8,
+                                           space.into_string().as_ptr() as *const i8,
                                            checks.as_ptr(),
                                            checks.len() as u64,
                                            status_ptr, attrs_ptr, attrs_sz_ptr);
@@ -905,7 +907,7 @@ impl Client {
         }
     }
 
-    pub fn map_add(&mut self, space: String, key: String, mapattrs: Vec<HyperMapAttribute>)
+    pub fn map_add(&mut self, space: &str, key: String, mapattrs: Vec<HyperMapAttribute>)
         -> Future<Result<(), HyperError>> { unsafe {
         let inner_client =
             self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
@@ -928,7 +930,7 @@ impl Client {
             let mut ops = &mut*ops_mutex.lock();
             let req_id =
                 hyperdex_client_map_add(inner_client.ptr,
-                                        space.as_ptr() as *const i8,
+                                        space.into_string().as_ptr() as *const i8,
                                         key_cstr, key_sz,
                                         c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                         status_ptr);
