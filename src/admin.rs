@@ -136,17 +136,18 @@ impl Admin {
 
     fn async_add_or_remove_space(&self, desc: &str, func: &str) -> Future<Result<(), HyperError>> {
         unsafe {
+            let desc_str = desc.to_c_str();
             let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "add" => {
                     hyperdex_admin_add_space(self.ptr,
-                                             desc.into_string().as_ptr() as *const i8,
+                                             desc_str.as_ptr() as *const i8,
                                              status_ptr)
                 },
                 "remove" => {
                     hyperdex_admin_rm_space(self.ptr,
-                                            desc.into_string().as_ptr() as *const i8,
+                                            desc_str.as_ptr() as *const i8,
                                             status_ptr)
                 },
                 _ => {

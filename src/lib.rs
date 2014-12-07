@@ -3,7 +3,6 @@
 #![feature(macro_rules)]
 
 extern crate libc;
-extern crate sync;
 
 pub use common::HyperError;
 pub use client::Client;

@@ -17,9 +17,7 @@ use std::sync::atomic::AtomicInt;
 use std::sync::Future;
 use std::time::duration::Duration;
 use std::io::timer::sleep;
-
-use sync::deque::{BufferPool, Stealer, Worker};
-use sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
 
 use libc::*;
 
@@ -400,7 +398,8 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
 
     match val {
         HyperString(s) => {
-            if hyperdex_ds_copy_string(arena, s.as_ptr() as *const i8, s.len() as u64,
+            let cstr = s.to_c_str();
+            if hyperdex_ds_copy_string(arena, cstr.as_ptr() as *const i8, s.len() as u64,
                                        &mut status, &mut cs, &mut sz) < 0 {
                 mem_err
             } else {
@@ -427,7 +426,7 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
                 mem_err
             } else {
                 for s in ls.iter() {
-                    let cstr = CString::new(s.as_ptr() as *const i8, false);
+                    let cstr = s.to_c_str();
                     if hyperdex_ds_list_append_string(ds_lst, cstr.as_ptr(),
                                                       cstr.len() as u64, &mut status) < 0 {
                         return mem_err;
@@ -493,8 +492,6 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
             value_sz: cval_sz,
             datatype: dt,
         });
-        let lolkey = CString::new(ckey, false);
-        let lol = Vec::from_raw_parts(cval as *mut i8, cval_sz as uint, cval_sz as uint);
     }
 
     Ok(attrs)
@@ -524,6 +521,35 @@ macro_rules! NewHyperMapAttribute(
         }
     );
 )
+
+#[macro_export]
+macro_rules! put(
+    ($client: ident, $spacename: expr, $key: expr, $value: expr) => (
+        $client.put($spacename, $key.to_bytes(), $value)
+    );
+)
+
+pub trait ToByteVec {
+    fn to_bytes(&self) -> Vec<u8>;
+}
+
+impl<'a> ToByteVec for &'a str {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+}
+
+impl<'a> ToByteVec for &'a [u8] {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_vec()
+    }
+}
+
+impl ToByteVec for Vec<u8> {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+}
 
 #[deriving(Clone)]
 pub struct InnerClient {
@@ -608,7 +634,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
 
             let key_cstr = key.as_ptr() as *const i8;
             let key_sz = key.len() as u64;
@@ -619,13 +645,14 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let attrs_sz_ptr = transmute(box 0u32);
 
             let (err_tx, err_rx) = channel();
+            let space_str = space.to_c_str();
 
             let mut ops_mutex = inner_client.ops.clone();
             {
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.into_string().as_ptr() as *const i8,
+                                                               space_str.as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                status_ptr, attrs_ptr, attrs_sz_ptr);
                 if req_id < 0 {
@@ -677,7 +704,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
 
             let key_cstr = key.as_ptr() as *const i8;
             let key_sz = key.len() as u64;
@@ -698,13 +725,14 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             };
 
             let (err_tx, err_rx) = channel();
+            let space_str = space.to_c_str();
 
             let mut ops_mutex = inner_client.ops.clone();
             {
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.into_string().as_ptr() as *const i8,
+                                                               space_str.as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
@@ -760,7 +788,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
             -> Future<Result<(), HyperError>> { unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
 
             let key_cstr = key.as_ptr() as *const i8;
             let key_sz = key.len() as u64;
@@ -774,13 +802,14 @@ macro_rules! make_fn_spacename_key_attributes_status(
             };
 
             let (err_tx, err_rx) = channel();
+            let space_str = space.to_c_str();
 
             let mut ops_mutex = inner_client.ops.clone();
             {
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
-                                                               space.into_string().as_ptr() as *const i8,
+                                                               space_str.as_ptr() as *const i8,
                                                                key_cstr, key_sz,
                                                                obj.as_ptr(), obj.len() as u64,
                                                                status_ptr);
@@ -858,7 +887,7 @@ impl Client {
     pub fn search(&mut self, space: &str, predicates: Vec<HyperPredicate>)
         -> Receiver<Result<HyperObject, HyperError>> { unsafe {
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
 
             let (res_tx, res_rx) = channel();
 
@@ -878,13 +907,14 @@ impl Client {
             let status_ptr = transmute(box 0u32);
             let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
             let attrs_sz_ptr = transmute(box 0u32);
+            let space_str = space.to_c_str();
 
             let mut ops_mutex = inner_client.ops.clone();
             {
                 let mut ops = &mut*ops_mutex.lock();
                 let req_id =
                     hyperdex_client_search(inner_client.ptr,
-                                           space.into_string().as_ptr() as *const i8,
+                                           space_str.as_ptr() as *const i8,
                                            checks.as_ptr(),
                                            checks.len() as u64,
                                            status_ptr, attrs_ptr, attrs_sz_ptr);
@@ -910,7 +940,7 @@ impl Client {
     pub fn map_add(&mut self, space: &str, key: String, mapattrs: Vec<HyperMapAttribute>)
         -> Future<Result<(), HyperError>> { unsafe {
         let inner_client =
-            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint].clone();
+            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
 
         let key_cstr = key.as_ptr() as *const i8;
         let key_sz = key.len() as u64;
@@ -924,13 +954,14 @@ impl Client {
         };
 
         let (err_tx, err_rx) = channel();
+        let space_str = space.to_c_str();
 
         let mut ops_mutex = inner_client.ops.clone();
         {
             let mut ops = &mut*ops_mutex.lock();
             let req_id =
                 hyperdex_client_map_add(inner_client.ptr,
-                                        space.into_string().as_ptr() as *const i8,
+                                        space_str.as_ptr() as *const i8,
                                         key_cstr, key_sz,
                                         c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                         status_ptr);

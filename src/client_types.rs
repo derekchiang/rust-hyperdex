@@ -3,8 +3,6 @@ use std::hash::sip::SipState;
 use std::mem::transmute;
 use std::hash::Hash;
 
-use sync::{Arc, Mutex};
-
 use libc::*;
 
 use common::*;
@@ -98,7 +96,8 @@ pub trait ToHyperValue {
 
 impl<'a> ToHyperValue for &'a str {
     fn to_hyper(self) -> HyperValue {
-        HyperValue::HyperString(self.as_bytes().to_vec())
+        let s = self.into_string();
+        HyperValue::HyperString(s.as_bytes().to_vec())
     }
 }
 
