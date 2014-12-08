@@ -529,6 +529,13 @@ macro_rules! put(
     );
 )
 
+#[macro_export]
+macro_rules! get(
+    ($client: ident, $spacename: expr, $key: expr) => (
+        $client.get($spacename, $key.to_bytes())
+    );
+)
+
 pub trait ToByteVec {
     fn to_bytes(&self) -> Vec<u8>;
 }

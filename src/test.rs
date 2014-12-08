@@ -41,7 +41,7 @@ fn test_get_nonexistent_objects() {
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.get(space_name, "lol".as_bytes().to_vec()) {
+    match get!(client, space_name, "lol") {
         Ok(obj) => panic!("wrongly getting an object: {}", obj),
         Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
     }
@@ -57,19 +57,16 @@ fn test_add_and_get_objects() {
         Err(err) => panic!(format!("{}", err)),
     };
 
-    let key = "derek".as_bytes().to_vec();
-    let value = NewHyperObject!(
+    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    match put!(client, space_name, "derek", NewHyperObject!(
         "first": "Derek",
         "last": "Chiang",
-    );
-
-    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match client.put(space_name, key, value) {
+    )) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
 
-    match client.get(space_name, "derek".as_bytes().to_vec()) {
+    match get!(client, space_name, "derek") {
         Ok(mut obj) => {
             let first_str = "first".into_string();
             let last_str = "last".into_string();
@@ -83,8 +80,8 @@ fn test_add_and_get_objects() {
                 x => panic!(x),
             };
 
-            assert_eq!(first, "Derek".as_bytes().to_vec());
-            assert_eq!(last, "Chiang".as_bytes().to_vec());
+            assert_eq!(first, "Derek".to_bytes());
+            assert_eq!(last, "Chiang".to_bytes());
         },
         Err(err) => panic!(err),
     }
@@ -147,20 +144,15 @@ fn test_add_and_search_objects() {
 
     let res = client.search(space_name, predicates);
 
-    for obj in res.iter() {
-        println!("{}", obj.unwrap());
+    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
+        HyperInt(i) => assert_eq!(i, 20),
+        x => panic!(x),
     }
 
-    // match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
-        // HyperInt(i) => assert_eq!(i, 20),
-        // x => panic!(x),
-    // }
+    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
+        HyperInt(i) => assert_eq!(i, 30),
+        x => panic!(x),
+    }
 
-    // match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
-        // HyperInt(i) => assert_eq!(i, 30),
-        // x => panic!(x),
-    // }
-
-    println!("the space name is: {}", space_name);
     admin.remove_space(space_name).unwrap();
 }
