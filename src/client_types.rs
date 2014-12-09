@@ -81,6 +81,16 @@ pub struct HyperPredicate {
     pub predicate: HyperPredicateType,
 }
 
+impl HyperPredicate {
+    pub fn new<T>(attr: String, predicate: HyperPredicateType, value: T) -> HyperPredicate where T: ToHyperValue {
+        HyperPredicate {
+            attr: attr,
+            value: value.to_hyper(),
+            predicate: predicate,
+        }
+    }
+}
+
 pub struct HyperMapAttribute {
     pub attr: String,
     pub key: HyperValue,

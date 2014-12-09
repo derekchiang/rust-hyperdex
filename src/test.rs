@@ -127,17 +127,10 @@ fn test_add_and_search_objects() {
     }
 
     let mut predicates = Vec::new();
-    predicates.push(HyperPredicate {
-        attr: "age".into_string(),
-        value: HyperInt(30),
-        predicate: LESS_EQUAL,
-    });
+    predicates.push(HyperPredicate::new("age".into_string(), LESS_EQUAL, 30));
 
     let res = client.search(space_name, predicates);
 
-    let whatever: Result<u64, String> = Ok(6u64);
-    println!("{}", whatever.unwrap());
-    
     for obj_res in res.iter() {
         let obj = obj_res.unwrap();
         let name: Vec<u8> = obj.get("first".into_string()).unwrap();
