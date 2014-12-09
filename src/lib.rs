@@ -1,6 +1,7 @@
 #![feature(globs)]
 #![feature(concat_idents)]
 #![feature(macro_rules)]
+#![feature(slicing_syntax)]
 
 extern crate libc;
 
@@ -20,4 +21,3 @@ mod hyperdex_hyperspace_builder;
 mod common;
 mod test;
 mod client_types;
-

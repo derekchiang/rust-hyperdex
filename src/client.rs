@@ -30,7 +30,7 @@ use client_types::HyperValue::*;
 use client_types::HyperState::*;
 
 unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
-    let mut attrs = HashMap::new();
+    let mut attrs = HyperObject::new();
 
     for i in range(0, c_attrs_sz) {
         let attr = *c_attrs.offset(i as int);
@@ -38,14 +38,14 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
         match attr.datatype {
             HYPERDATATYPE_STRING => {
                 attrs.insert(name,
-                             HyperString(from_buf(attr.value as *const u8, attr.value_sz as uint)));
+                             from_buf(attr.value as *const u8, attr.value_sz as uint));
             },
             HYPERDATATYPE_INT64 => {
                 let mut cint = 0i64;
                 if hyperdex_ds_unpack_int(attr.value as *const i8, attr.value_sz, &mut cint) < 0 {
                     return Err("Server sent a malformed int".into_string());
                 }
-                attrs.insert(name, HyperInt(cint));
+                attrs.insert(name, cint);
             },
             HYPERDATATYPE_FLOAT => {
                 let mut cdouble = 0f64;
@@ -53,7 +53,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                                             attr.value_sz, &mut cdouble) < 0 {
                     return Err("Server sent a malformed float".into_string());
                 }
-                attrs.insert(name, HyperFloat(cdouble));
+                attrs.insert(name, cdouble);
             },
 
             HYPERDATATYPE_LIST_STRING => {
@@ -73,7 +73,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperListString(lst));
+                attrs.insert(name, lst);
             },
             HYPERDATATYPE_LIST_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -91,7 +91,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     }
                 }
 
-                attrs.insert(name, HyperListInt(lst));
+                attrs.insert(name, lst);
             },
             HYPERDATATYPE_LIST_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -109,7 +109,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     }
                 }
 
-                attrs.insert(name, HyperListFloat(lst));
+                attrs.insert(name, lst);
             },
 
             HYPERDATATYPE_SET_STRING => {
@@ -129,7 +129,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperSetString(set));
+                attrs.insert(name, set);
             },
             HYPERDATATYPE_SET_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -147,7 +147,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     }
                 }
 
-                attrs.insert(name, HyperSetInt(set));
+                attrs.insert(name, set);
             },
             HYPERDATATYPE_SET_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -165,7 +165,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     }
                 }
 
-                attrs.insert(name, HyperSetFloat(set));
+                attrs.insert(name, set);
             },
 
             HYPERDATATYPE_MAP_STRING_STRING => {
@@ -189,7 +189,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapStringString(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_STRING_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -210,7 +210,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapStringInt(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_STRING_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -231,7 +231,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapStringFloat(map));
+                attrs.insert(name, map);
             },
 
             HYPERDATATYPE_MAP_INT64_STRING => {
@@ -252,7 +252,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapIntString(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_INT64_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -270,7 +270,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapIntInt(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_INT64_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -289,7 +289,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapIntFloat(map));
+                attrs.insert(name, map);
             },
 
             HYPERDATATYPE_MAP_FLOAT_STRING => {
@@ -310,7 +310,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapFloatString(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_FLOAT_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -329,7 +329,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapFloatInt(map));
+                attrs.insert(name, map);
             },
             HYPERDATATYPE_MAP_FLOAT_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
@@ -348,7 +348,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         break;
                     }
                 }
-                attrs.insert(name, HyperMapFloatFloat(map));
+                attrs.insert(name, map);
             },
 
             _ => { return Err(format!("Unrecognized datatype: {}", attr.datatype)); }
@@ -483,7 +483,7 @@ unsafe fn convert_predicates(arena: *mut Struct_hyperdex_ds_arena, predicates: V
 unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperObject) -> Result<Vec<Struct_hyperdex_client_attribute>, String> {
     let mut attrs = Vec::new();
 
-    for (key, val) in obj.into_iter() {
+    for (key, val) in obj.map.into_iter() {
         let mut ckey = try!(convert_cstring(arena, key));
         let (cval, cval_sz, dt) = try!(convert_type(arena, val));
         attrs.push(Struct_hyperdex_client_attribute {
@@ -502,9 +502,9 @@ macro_rules! NewHyperObject(
     ($($key: expr: $value: expr,)*) => (
         {
             use std::collections::HashMap;
-            let mut obj = HashMap::new();
+            let mut obj = HyperObject::new();
             $(
-                obj.insert($key.into_string(), $value.to_hyper());
+                obj.insert($key.into_string(), $value);
             )*
             obj
         }

@@ -70,14 +70,14 @@ fn test_add_and_get_objects() {
         Ok(mut obj) => {
             let first_str = "first".into_string();
             let last_str = "last".into_string();
-            let first = match obj.find_copy(&first_str).unwrap() {
-                HyperString(s) => s,
-                x => panic!(x),
+            let first: Vec<u8> = match obj.get(first_str) {
+                Ok(s) => s,
+                Err(err) => panic!(err),
             };
 
-            let last = match obj.find_copy(&last_str).unwrap() {
-                HyperString(s) => s,
-                x => panic!(x),
+            let last: Vec<u8> = match obj.get(last_str) {
+                Ok(s) => s,
+                Err(err) => panic!(err),
             };
 
             assert_eq!(first, "Derek".to_bytes());
@@ -117,20 +117,11 @@ fn test_add_and_search_objects() {
         Err(err) => panic!("{}", err),
     }
 
-    match put!(client, space_name, "ohwell", NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
-        "age": 40,
-    )) {
-        Ok(()) => (),
-        Err(err) => panic!("{}", err),
-    }
-
-    match put!(client, space_name, "whatup", NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
-        "age": 50,
-    )) {
+    let mut obj = HyperObject::new();
+    obj.insert("first".into_string(), "Derek");
+    obj.insert("last".into_string(), "Chiang");
+    obj.insert("age".into_string(), 40);
+    match put!(client, space_name, "ohwell", obj) {
         Ok(()) => (),
         Err(err) => panic!("{}", err),
     }
@@ -144,14 +135,15 @@ fn test_add_and_search_objects() {
 
     let res = client.search(space_name, predicates);
 
-    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
-        HyperInt(i) => assert_eq!(i, 20),
-        x => panic!(x),
-    }
-
-    match res.recv().unwrap().remove(&"age".into_string()).unwrap() {
-        HyperInt(i) => assert_eq!(i, 30),
-        x => panic!(x),
+    let whatever: Result<u64, String> = Ok(6u64);
+    println!("{}", whatever.unwrap());
+    
+    for obj_res in res.iter() {
+        let obj = obj_res.unwrap();
+        let name: Vec<u8> = obj.get("first".into_string()).unwrap();
+        let age: i64 = obj.get("age".into_string()).unwrap();
+        assert!(age <= 30);
+        println!("{} is {} years old", name, age);
     }
 
     admin.remove_space(space_name).unwrap();

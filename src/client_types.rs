@@ -13,6 +13,7 @@ use hyperdex::*;
 
 use self::HyperValue::*;
 use self::HyperState::*;
+use self::HyperObjectKeyError::*;
 
 #[deriving(Show, Clone)]
 pub enum HyperValue {
@@ -86,7 +87,86 @@ pub struct HyperMapAttribute {
     pub value: HyperValue,
 }
 
-pub type HyperObject = HashMap<String, HyperValue>;
+#[deriving(Show)]
+pub enum HyperObjectKeyError {
+    KeyDoesNotExist,
+    ObjectIsAnotherType,
+}
+
+pub trait FromHyperValue {
+    fn from_hyper(val: HyperValue) -> Result<Self, HyperObjectKeyError>;
+}
+
+macro_rules! from_hypervalue_impl(
+    ($t: ty, $hyper_name: ident) => (
+        impl FromHyperValue for $t {
+            fn from_hyper(val: HyperValue) -> Result<$t, HyperObjectKeyError> {
+                match val {
+                    $hyper_name(s) => {
+                        Ok(s)
+                    },
+                    _ => Err(ObjectIsAnotherType),
+                }
+            }
+        }
+    )
+)
+
+from_hypervalue_impl!(Vec<u8>, HyperString)
+from_hypervalue_impl!(i64, HyperInt)
+from_hypervalue_impl!(f64, HyperFloat)
+
+from_hypervalue_impl!(Vec<Vec<u8>>, HyperListString)
+from_hypervalue_impl!(Vec<i64>, HyperListInt)
+from_hypervalue_impl!(Vec<f64>, HyperListFloat)
+
+from_hypervalue_impl!(TreeSet<Vec<u8>>, HyperSetString)
+from_hypervalue_impl!(TreeSet<i64>, HyperSetInt)
+from_hypervalue_impl!(TreeSet<F64>, HyperSetFloat)
+
+from_hypervalue_impl!(HashMap<Vec<u8>, Vec<u8>>, HyperMapStringString)
+from_hypervalue_impl!(HashMap<Vec<u8>, i64>, HyperMapStringInt)
+from_hypervalue_impl!(HashMap<Vec<u8>, f64>, HyperMapStringFloat)
+
+from_hypervalue_impl!(HashMap<i64, Vec<u8>>, HyperMapIntString)
+from_hypervalue_impl!(HashMap<i64, i64>, HyperMapIntInt)
+from_hypervalue_impl!(HashMap<i64, f64>, HyperMapIntFloat)
+
+from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString)
+from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt)
+from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat)
+
+#[deriving(Show)]
+pub struct HyperObject {
+    pub map: HashMap<String, HyperValue>,
+}
+
+impl HyperObject {
+    pub fn new() -> HyperObject {
+        HyperObject {
+            map: HashMap::new()
+        }
+    }
+
+    pub fn insert<T>(&mut self, attr: String, val: T) where T: ToHyperValue {
+        self.map.insert(attr, val.to_hyper());
+    }
+
+    pub fn get<T>(&self, attr: String) -> Result<T, HyperObjectKeyError> where T: FromHyperValue {
+        let val_opt = self.map.get(&attr);
+        match val_opt {
+            Some(val) => {
+                match FromHyperValue::from_hyper(val.clone()) {
+                    Ok(ok) => Ok(ok),
+                    Err(err) => Err(err),
+                }
+            },
+            None => {
+                Err(KeyDoesNotExist)
+            }
+        }
+    }
+}
 
 pub type HyperMap = HashMap<HyperValue, HyperValue>;
 
