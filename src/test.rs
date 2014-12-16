@@ -109,8 +109,8 @@ fn test_add_and_search_objects() {
     }
 
     match put!(client, space_name, "nemo", NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
+        "first": "Emin",
+        "last": "Sirer",
         "age": 30,
     )) {
         Ok(()) => (),

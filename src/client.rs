@@ -33,7 +33,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
     let mut attrs = HyperObject::new();
 
     for i in range(0, c_attrs_sz) {
-        let attr = *c_attrs.offset(i as int);
+        let ref attr = *c_attrs.offset(i as int);
         let name = to_string(attr.attr);
         match attr.datatype {
             HYPERDATATYPE_STRING => {
@@ -668,7 +668,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
 
-            Future::from_fn(proc() {
+            Future::from_fn(move|| {
                 let status: Box<u32> = transmute(status_ptr);
                 let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
                 let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
@@ -751,7 +751,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             }
             hyperdex_ds_arena_destroy(arena);
 
-            Future::from_fn(proc() {
+            Future::from_fn(move|| {
                 let status: Box<u32> = transmute(status_ptr);
                 let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
                 let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
@@ -827,7 +827,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
             }
 
             hyperdex_ds_arena_destroy(arena);
-            Future::from_fn(proc() {
+            Future::from_fn(move|| {
                 let err = err_rx.recv();
                 let status: Box<u32> = transmute(status_ptr);
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
@@ -876,7 +876,7 @@ impl Client {
                     err_tx: err_tx.clone(),
                 };
                 let mut ic_clone = inner_client.clone();
-                spawn(proc() {
+                spawn(move|| {
                     ic_clone.run_forever(shutdown_rx);
                 });
                 inner_clients.push(inner_client);
@@ -979,7 +979,7 @@ impl Client {
         }
 
         hyperdex_ds_arena_destroy(arena);
-        Future::from_fn(proc() {
+        Future::from_fn(move|| {
             let err = err_rx.recv();
             let status: Box<u32> = transmute(status_ptr);
             if err.status != HYPERDEX_CLIENT_SUCCESS {

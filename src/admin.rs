@@ -4,6 +4,7 @@ use std::io::net::ip::SocketAddr;
 use std::time::duration::Duration;
 use std::sync::Future;
 use std::ptr::null;
+use std::thunk::Thunk;
 
 use libc::*;
 
@@ -19,8 +20,8 @@ pub struct Admin {
 pub struct AdminRequest {
     id: int64_t,
     status: Box<u32>,
-    success: Option<proc(): Send>,
-    failure: Option<proc(err: HyperError): Send>,
+    success: Option<Thunk>,
+    failure: Option<Thunk<HyperError, ()>>,
 }
 
 impl Admin {
@@ -35,7 +36,7 @@ impl Admin {
         } else {
             let (req_tx, req_rx) = channel();
 
-            spawn(proc() {
+            spawn(move|| {
                 // A list of pending requests
                 let mut pending: Vec<AdminRequest> = Vec::new();
                 let mut timer = Timer::new().unwrap();
@@ -71,17 +72,17 @@ impl Admin {
                         match *req.status {
                             HYPERDEX_ADMIN_SUCCESS => {
                                 if req.success.is_some() {
-                                    req.success.unwrap()();
+                                    req.success.unwrap().invoke(());
                                 }
                             },
                             _ => {
                                 if req.failure.is_some() {
-                                    req.failure.unwrap()(get_admin_error(ptr, *req.status));
+                                    req.failure.unwrap().invoke(get_admin_error(ptr, *req.status));
                                 }
                             }
                         }
                     } else if req.failure.is_some() {
-                        req.failure.unwrap()(get_admin_error(ptr, status));
+                        req.failure.unwrap().invoke(get_admin_error(ptr, status));
                     }
                 };
 
@@ -162,17 +163,17 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(proc() {
+                success: Some(Thunk::new(move|| {
                     res_tx.send(Ok(()));
-                }),
-                failure: Some(proc(err: HyperError) {
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
                     res_tx2.send(Err(err));
-                }),
+                })),
             };
 
             self.req_tx.send(req);
 
-            Future::from_fn(proc() {
+            Future::from_fn(move|| {
                 res_rx.recv()
             })
         }
@@ -219,19 +220,19 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(proc() {
+                success: Some(Thunk::new(move|| {
                     let res_box: Box<*const i8> = transmute(res_ptr);
                     let res = to_string(*res_box);
                     res_tx.send(Ok(res));
-                }),
-                failure: Some(proc(err: HyperError) {
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
                     res_tx2.send(Err(err));
-                }),
+                })),
             };
 
             self.req_tx.send(req);
 
-            Future::from_fn(proc() {
+            Future::from_fn(move|| {
                 res_rx.recv()
             })
         }
