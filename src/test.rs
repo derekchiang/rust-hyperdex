@@ -9,14 +9,14 @@ use hyperdex_client::*;
 
 static coord_addr: &'static str = "127.0.0.1:1982";
 
-static space_name: &'static str = "phonebook";
+static space_name: &'static str = "contacts";
 
 static space_desc: &'static str = "
-space phonebook
+space contacts
 key username
 attributes first, last, int age
 subspace first, last
-create 8 partitions
+create 2 partitions
 tolerate 2 failures";
 
 #[test]
@@ -29,7 +29,7 @@ fn test_add_and_rm_space() {
     };
 
     admin.remove_space(space_name).unwrap();
-} 
+}
 
 #[test]
 fn test_get_nonexistent_objects() {
@@ -41,7 +41,7 @@ fn test_get_nonexistent_objects() {
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match get!(client, space_name, "lol") {
+    match client.get(space_name, "lol") {
         Ok(obj) => panic!("wrongly getting an object: {}", obj),
         Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
     }
@@ -54,28 +54,26 @@ fn test_add_and_get_objects() {
     let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
     match admin.add_space(space_desc) {
         Ok(()) => (),
-        Err(err) => panic!(format!("{}", err)),
+        Err(err) => panic!(err),
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
-    match put!(client, space_name, "derek", NewHyperObject!(
+    match client.put(space_name, "derek", NewHyperObject!(
         "first": "Derek",
         "last": "Chiang",
     )) {
         Ok(()) => (),
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!(err),
     }
 
-    match get!(client, space_name, "derek") {
+    match client.get(space_name, "derek") {
         Ok(mut obj) => {
-            let first_str = "first".into_string();
-            let last_str = "last".into_string();
-            let first: Vec<u8> = match obj.get(first_str) {
+            let first: Vec<u8> = match obj.get("first") {
                 Ok(s) => s,
                 Err(err) => panic!(err),
             };
 
-            let last: Vec<u8> = match obj.get(last_str) {
+            let last: Vec<u8> = match obj.get("last") {
                 Ok(s) => s,
                 Err(err) => panic!(err),
             };
@@ -99,43 +97,43 @@ fn test_add_and_search_objects() {
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
 
-    match put!(client, space_name, "derek", NewHyperObject!(
+    match client.put(space_name, "derek", NewHyperObject!(
         "first": "Derek",
         "last": "Chiang",
         "age": 20,
     )) {
         Ok(()) => (),
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!(err),
     }
 
-    match put!(client, space_name, "nemo", NewHyperObject!(
-        "first": "Emin",
-        "last": "Sirer",
-        "age": 30,
+    match client.put(space_name, "robert", NewHyperObject!(
+        "first": "Robert",
+        "last": "Escriva",
+        "age": 25,
     )) {
         Ok(()) => (),
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!(err),
     }
 
     let mut obj = HyperObject::new();
-    obj.insert("first".into_string(), "Derek");
-    obj.insert("last".into_string(), "Chiang");
-    obj.insert("age".into_string(), 40);
-    match put!(client, space_name, "ohwell", obj) {
+    obj.insert("first", "Emin");
+    obj.insert("last", "Sirer");
+    obj.insert("age", 30);
+
+    match client.put(space_name, "emin", obj) {
         Ok(()) => (),
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!(err),
     }
 
-    let mut predicates = Vec::new();
-    predicates.push(HyperPredicate::new("age".into_string(), LESS_EQUAL, 30));
+    let predicates = vec!(HyperPredicate::new("age", LESS_EQUAL, 25));
 
     let res = client.search(space_name, predicates);
 
     for obj_res in res.iter() {
         let obj = obj_res.unwrap();
-        let name: Vec<u8> = obj.get("first".into_string()).unwrap();
-        let age: i64 = obj.get("age".into_string()).unwrap();
-        assert!(age <= 30);
+        let name: Vec<u8> = obj.get("first").unwrap();
+        let age: i64 = obj.get("age").unwrap();
+        assert!(age <= 25);
         println!("{} is {} years old", name, age);
     }
 

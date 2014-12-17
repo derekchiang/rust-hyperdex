@@ -82,9 +82,10 @@ pub struct HyperPredicate {
 }
 
 impl HyperPredicate {
-    pub fn new<T>(attr: String, predicate: HyperPredicateType, value: T) -> HyperPredicate where T: ToHyperValue {
+    pub fn new<A, T>(attr: A, predicate: HyperPredicateType, value: T)
+        -> HyperPredicate where A: ToString, T: ToHyperValue {
         HyperPredicate {
-            attr: attr,
+            attr: attr.to_string(),
             value: value.to_hyper(),
             predicate: predicate,
         }
@@ -158,12 +159,12 @@ impl HyperObject {
         }
     }
 
-    pub fn insert<T>(&mut self, attr: String, val: T) where T: ToHyperValue {
-        self.map.insert(attr, val.to_hyper());
+    pub fn insert<K, V>(&mut self, attr: K, val: V) where K: ToString, V: ToHyperValue {
+        self.map.insert(attr.to_string(), val.to_hyper());
     }
 
-    pub fn get<T>(&self, attr: String) -> Result<T, HyperObjectKeyError> where T: FromHyperValue {
-        let val_opt = self.map.get(&attr);
+    pub fn get<K, T>(&self, attr: K) -> Result<T, HyperObjectKeyError> where K: ToString, T: FromHyperValue {
+        let val_opt = self.map.get(&attr.to_string());
         match val_opt {
             Some(val) => {
                 match FromHyperValue::from_hyper(val.clone()) {
@@ -180,6 +181,34 @@ impl HyperObject {
 
 pub type HyperMap = HashMap<HyperValue, HyperValue>;
 
+pub trait ToByteVec {
+    fn to_bytes(&self) -> Vec<u8>;
+}
+
+impl<'a> ToByteVec for &'a str {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+}
+
+impl<'a> ToByteVec for &'a [u8] {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_vec()
+    }
+}
+
+impl ToByteVec for Vec<u8> {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+}
+
+impl ToByteVec for String {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+}
+
 pub trait ToHyperValue {
     fn to_hyper(self) -> HyperValue;
 }
@@ -187,7 +216,7 @@ pub trait ToHyperValue {
 impl<'a> ToHyperValue for &'a str {
     fn to_hyper(self) -> HyperValue {
         let s = self.into_string();
-        HyperValue::HyperString(s.as_bytes().to_vec())
+        HyperValue::HyperString(s.into_bytes())
     }
 }
 

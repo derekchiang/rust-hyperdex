@@ -97,7 +97,7 @@ impl Admin {
                                 },
                                 Err(()) => {
                                     // TODO: this is causing trouble for some reason
-                                    // hyperdex_admin_destroy(ptr);
+                                    hyperdex_admin_destroy(ptr);
                                     return;
                                 }
                             };
@@ -238,3 +238,12 @@ impl Admin {
         }
     }
 }
+
+// impl Drop for Admin {
+    // fn drop(&mut self) {
+        // unsafe {
+            // hyperdex_admin_destroy(self.ptr);
+        // }
+    // }
+// }
+
