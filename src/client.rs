@@ -823,6 +823,66 @@ macro_rules! make_fn_spacename_key_attributes_status(
     );
 )
 
+macro_rules! make_fn_spacename_key_mapattributes_status(
+    ($fn_name: ident, $async_name: ident) => (
+        impl Client {
+            pub fn $async_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
+                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+                let inner_client =
+                    self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+
+                let key_str = key.to_string();
+                let space_str = space.to_c_str();
+
+                let status_ptr = transmute(box 0u32);
+
+                let arena = hyperdex_ds_arena_create();
+                let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
+                    Ok(x) => x,
+                    Err(err) => panic!(err),
+                };
+
+                let (err_tx, err_rx) = channel();
+
+                let mut ops_mutex = inner_client.ops.clone();
+                {
+                    let mut ops = &mut*ops_mutex.lock();
+                    let req_id =
+                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                                                space_str.as_ptr() as *const i8,
+                                                key_str.as_ptr() as *const i8,
+                                                key_str.len() as u64,
+                                                c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
+                                                status_ptr);
+                    if req_id < 0 {
+                        return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                    }
+                    ops.insert(req_id, HyperStateOp(err_tx));
+                }
+
+                hyperdex_ds_arena_destroy(arena);
+                Future::from_fn(move|| {
+                    let err = err_rx.recv();
+                    let status: Box<u32> = transmute(status_ptr);
+                    if err.status != HYPERDEX_CLIENT_SUCCESS {
+                        Err(err)
+                    } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                        Err(get_client_error(inner_client.ptr, *status))
+                    } else {
+                        Ok(())
+                    }
+                })}
+            }
+
+            pub fn $fn_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
+                -> Result<(), HyperError> where S: ToCStr, K: ToString {
+                self.$async_name(space, key, mapattrs).unwrap()
+            }
+        }
+    )
+)
+
+
 pub struct Client {
     counter: AtomicInt,
     shutdown_txs: Vec<Sender<()>>,
@@ -919,55 +979,6 @@ impl Client {
         }
     }
 
-    pub fn map_add<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
-        -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
-        let inner_client =
-            self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
-
-        let key_str = key.to_string();
-        let space_str = space.to_c_str();
-
-        let status_ptr = transmute(box 0u32);
-
-        let arena = hyperdex_ds_arena_create();
-        let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
-            Ok(x) => x,
-            Err(err) => panic!(err),
-        };
-
-        let (err_tx, err_rx) = channel();
-
-        let mut ops_mutex = inner_client.ops.clone();
-        {
-            let mut ops = &mut*ops_mutex.lock();
-            let req_id =
-                hyperdex_client_map_add(inner_client.ptr,
-                                        space_str.as_ptr() as *const i8,
-                                        key_str.as_ptr() as *const i8,
-                                        key_str.len() as u64,
-                                        c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
-                                        status_ptr);
-            if req_id < 0 {
-                return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
-            }
-            ops.insert(req_id, HyperStateOp(err_tx));
-        }
-
-        hyperdex_ds_arena_destroy(arena);
-        Future::from_fn(move|| {
-            let err = err_rx.recv();
-            let status: Box<u32> = transmute(status_ptr);
-            if err.status != HYPERDEX_CLIENT_SUCCESS {
-                Err(err)
-            } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                Err(get_client_error(inner_client.ptr, *status))
-            } else {
-                Ok(())
-            }
-        })}
-    }
-
-
     // pub fn new_from_conn_str(conn: String) -> Result<Client, String> {
         // let conn_str = conn.to_c_str().as_ptr();
         // let ptr = unsafe { hyperdex_client_create_conn_str(conn_str) };
@@ -1006,3 +1017,15 @@ make_fn_spacename_key_attributes_status!(set_remove, async_set_remove)
 make_fn_spacename_key_attributes_status!(set_intersect, async_set_intersect)
 make_fn_spacename_key_attributes_status!(set_union, async_set_union)
 make_fn_spacename_key_attributes_status!(map_remove, async_map_remove)
+
+make_fn_spacename_key_mapattributes_status!(map_add, async_map_add)
+make_fn_spacename_key_mapattributes_status!(map_atomic_add, async_map_atomic_add)
+make_fn_spacename_key_mapattributes_status!(map_atomic_sub, async_map_atomic_sub)
+make_fn_spacename_key_mapattributes_status!(map_atomic_mul, async_map_atomic_mul)
+make_fn_spacename_key_mapattributes_status!(map_atomic_div, async_map_atomic_div)
+make_fn_spacename_key_mapattributes_status!(map_atomic_mod, async_map_atomic_mod)
+make_fn_spacename_key_mapattributes_status!(map_atomic_and, async_map_atomic_and)
+make_fn_spacename_key_mapattributes_status!(map_atomic_or, async_map_atomic_or)
+make_fn_spacename_key_mapattributes_status!(map_atomic_xor, async_map_atomic_xor)
+make_fn_spacename_key_mapattributes_status!(map_string_prepend, async_map_string_prepend)
+make_fn_spacename_key_mapattributes_status!(map_string_append, async_map_string_append)
