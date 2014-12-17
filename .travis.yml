@@ -1,1 +1,8 @@
 language: rust
+
+before_install:
+    - sudo su -
+    - wget -O - http://ubuntu.hyperdex.org/hyperdex.gpg.key | apt-key add -
+    - wget -O /etc/apt/sources.list.d/hyperdex.list http://ubuntu.hyperdex.org/trusty.list
+    - apt-get update
+    - apt-get install hyperdex
