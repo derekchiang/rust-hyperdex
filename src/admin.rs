@@ -237,6 +237,201 @@ impl Admin {
             })
         }
     }
+
+    fn read_only(&self, ro: bool) -> Result<(), HyperError> {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_read_only(self.ptr, if ro { 1 } else { 0 }, status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr));
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
+    fn wait_until_stable(&self) -> Result<(), HyperError> {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_wait_until_stable(self.ptr, status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr));
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
+    fn fault_tolerance<S>(&self, space: S, ft: u64) -> Result<(), HyperError> where S: ToCStr {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+
+            let space_str = space.to_c_str();
+
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_fault_tolerance(self.ptr, space_str.as_ptr(), ft, status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr));
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
+    fn validate_space<D>(&self, desc: D) -> Result<(), HyperError> where D: ToCStr {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+
+            let desc_str = desc.to_c_str();
+
+            let res = hyperdex_admin_validate_space(self.ptr, desc_str.as_ptr(), status_ptr);
+            if res == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr));
+            }
+
+            return Ok(());
+        }
+    }
+
+    pub fn hyperdex_admin_mv_space<S, T>(&self, source: S, target: T)
+        -> Result<(), HyperError> where S: ToCStr, T: ToCStr {
+        unsafe {
+            let source_str = source.to_c_str();
+            let target_str = target.to_c_str();
+            let mut status_ptr = transmute(box 0u32);
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_mv_space(self.ptr,
+                                                 source_str.as_ptr(),
+                                                 target_str.as_ptr(),
+                                                 status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr))
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
+    pub fn hyperdex_admin_add_index<S, A>(&self, space: S, attribute: A)
+        -> Result<(), HyperError> where S: ToCStr, A: ToCStr {
+        unsafe {
+            let space_str = space.to_c_str();
+            let attr_str = attribute.to_c_str();
+            let mut status_ptr = transmute(box 0u32);
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_add_index(self.ptr,
+                                                  space_str.as_ptr(),
+                                                  attr_str.as_ptr(),
+                                                  status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr))
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
+    pub fn hyperdex_admin_rm_index<S, A>(&self, idx: u64) -> Result<(), HyperError> {
+        unsafe {
+            let mut status_ptr = transmute(box 0u32);
+            let (res_tx, res_rx) = channel();
+            let req_id = hyperdex_admin_rm_index(self.ptr, idx, status_ptr);
+            if req_id == -1 {
+                return Err(get_admin_error(self.ptr, *status_ptr))
+            }
+
+            let res_tx2 = res_tx.clone();
+            let req = AdminRequest {
+                id: req_id,
+                status: transmute(status_ptr),
+                success: Some(Thunk::new(move|| {
+                    res_tx.send(Ok(()));
+                })),
+                failure: Some(Thunk::with_arg(move|err| {
+                    res_tx2.send(Err(err));
+                })),
+            };
+
+            self.req_tx.send(req);
+
+            res_rx.recv()
+        }
+    }
+
 }
 
 // impl Drop for Admin {

@@ -1003,7 +1003,7 @@ impl Client {
         })
     }
 
-    pub fn search<S>(&mut self, space: S, predicates: Vec<HyperPredicate>)
+    pub fn search<S>(&mut self, space: S, checks: Vec<HyperPredicate>)
         -> Receiver<Result<HyperObject, HyperError>> where S: ToCStr { unsafe {
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
@@ -1011,7 +1011,7 @@ impl Client {
             let (res_tx, res_rx) = channel();
 
             let arena = hyperdex_ds_arena_create();
-            let checks = match convert_predicates(arena, predicates) {
+            let c_checks = match convert_predicates(arena, checks) {
                 Ok(x) => x,
                 Err(err) => {
                     res_tx.send(Err(HyperError {
@@ -1034,8 +1034,8 @@ impl Client {
                 let req_id =
                     hyperdex_client_search(inner_client.ptr,
                                            space_str.as_ptr() as *const i8,
-                                           checks.as_ptr(),
-                                           checks.len() as u64,
+                                           c_checks.as_ptr(),
+                                           c_checks.len() as u64,
                                            status_ptr, attrs_ptr, attrs_sz_ptr);
                 if req_id < 0 {
                     res_tx.send(Err(get_client_error(inner_client.ptr, 0)));
