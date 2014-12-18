@@ -1,4 +1,4 @@
 [root]
-name = "rust_hyperdex"
+name = "hyperdex"
 version = "0.0.1"
 

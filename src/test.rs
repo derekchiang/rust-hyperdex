@@ -92,7 +92,7 @@ fn test_add_and_search_objects() {
     let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
     match admin.add_space(space_desc) {
         Ok(()) => (),
-        Err(err) => panic!(format!("{}", err)),
+        Err(err) => panic!(err),
     };
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
@@ -120,7 +120,8 @@ fn test_add_and_search_objects() {
     obj.insert("last", "Sirer");
     obj.insert("age", 30);
 
-    match client.put(space_name, "emin", obj) {
+    let fut = client.async_put(space_name, "emin", obj);
+    match fut.unwrap() {
         Ok(()) => (),
         Err(err) => panic!(err),
     }
