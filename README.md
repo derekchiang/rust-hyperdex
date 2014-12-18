@@ -4,7 +4,7 @@ Rust binding for [HyperDex](http://hyperdex.org/).
 
 ## Prerequisites
 
-You need to install the HyperDex development files.  Assuming you have added HyperDex's PPA by following the instructions [here](http://hyperdex.org/download/), you may simply install the following packages:
+You need to install the HyperDex development files.  Assuming you have added HyperDex's PPA by following [these instructions](http://hyperdex.org/download/), you may simply install the following packages:
 
     sudo apt-get install libhyperdex-dev libhyperdex-client-dev libhyperdex-admin-dev
 
