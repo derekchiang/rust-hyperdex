@@ -3,7 +3,7 @@
 use std::io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
 use std::comm::{Empty, Disconnected};
-use std::collections::{HashMap, TreeSet};
+use std::collections::{HashMap, BTreeSet};
 use std::c_str::CString;
 use std::vec::raw::from_buf;
 use std::path::BytesContainer;
@@ -115,7 +115,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
             HYPERDATATYPE_SET_STRING => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
                 hyperdex_ds_iterator_init(&mut citer, attr.datatype, attr.value, attr.value_sz);
-                let mut set = TreeSet::new();
+                let mut set = BTreeSet::new();
                 loop {
                     let mut cstr = null();
                     let mut cstr_sz = 0;
@@ -134,7 +134,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
             HYPERDATATYPE_SET_INT64 => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
                 hyperdex_ds_iterator_init(&mut citer, attr.datatype, attr.value, attr.value_sz);
-                let mut set = TreeSet::new();
+                let mut set = BTreeSet::new();
                 loop {
                     let mut num = 0i64;
                     let status = hyperdex_ds_iterate_set_int_next(&mut citer, &mut num);
@@ -152,7 +152,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
             HYPERDATATYPE_SET_FLOAT => {
                 let mut citer = Struct_hyperdex_ds_iterator::new();
                 hyperdex_ds_iterator_init(&mut citer, attr.datatype, attr.value, attr.value_sz);
-                let mut set = TreeSet::new();
+                let mut set = BTreeSet::new();
                 loop {
                     let mut num = 0f64;
                     let status = hyperdex_ds_iterate_set_float_next(&mut citer, &mut num);
@@ -508,7 +508,7 @@ macro_rules! NewHyperObject(
             obj
         }
     );
-)
+);
 
 #[macro_export]
 macro_rules! NewHyperMapAttribute(
@@ -519,7 +519,7 @@ macro_rules! NewHyperMapAttribute(
             value: $value.to_hyper(),
         }
     );
-)
+);
 
 #[deriving(Clone)]
 pub struct InnerClient {
@@ -674,7 +674,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
         }
         }
     );
-)
+);
 
 macro_rules! make_fn_spacename_key_attributenames_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
@@ -762,7 +762,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
         }
         }
     );
-)
+);
 
 macro_rules! make_fn_spacename_key_attributes_status(
     ($fn_name: ident, $async_name: ident) => (
@@ -821,7 +821,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
         }
         }
     );
-)
+);
 
 macro_rules! make_fn_spacename_key_mapattributes_status(
     ($fn_name: ident, $async_name: ident) => (
@@ -880,7 +880,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
             }
         }
     )
-)
+);
 
 macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
     ($fn_name: ident, $async_name: ident) => (
@@ -958,7 +958,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
             }
         }
     )
-)
+);
 
 pub struct Client {
     counter: AtomicInt,
@@ -1071,50 +1071,48 @@ impl Client {
     // }
 }
 
-make_fn_spacename_key_status_attributes!(get, async_get)
+make_fn_spacename_key_status_attributes!(get, async_get);
 
-make_fn_spacename_key_attributenames_status_attributes!(get_partial, async_get_partial)
+make_fn_spacename_key_attributenames_status_attributes!(get_partial, async_get_partial);
 
-make_fn_spacename_key_attributes_status!(put, async_put)
-make_fn_spacename_key_attributes_status!(put_if_not_exist, async_put_if_not_exist)
-make_fn_spacename_key_attributes_status!(atomic_add, async_atomic_add)
-make_fn_spacename_key_attributes_status!(atomic_sub, async_atomic_sub)
-make_fn_spacename_key_attributes_status!(atomic_mul, async_atomic_mul)
-make_fn_spacename_key_attributes_status!(atomic_div, async_atomic_div)
-make_fn_spacename_key_attributes_status!(atomic_mod, async_atomic_mod)
-make_fn_spacename_key_attributes_status!(atomic_and, async_atomic_and)
-make_fn_spacename_key_attributes_status!(atomic_or, async_atomic_or)
-make_fn_spacename_key_attributes_status!(atomic_xor, async_atomic_xor)
-make_fn_spacename_key_attributes_status!(string_prepend, async_string_prepend)
-make_fn_spacename_key_attributes_status!(string_append, async_string_append)
-make_fn_spacename_key_attributes_status!(list_lpush, async_list_lpush)
-make_fn_spacename_key_attributes_status!(list_rpush, async_list_rpush)
-make_fn_spacename_key_attributes_status!(set_add, async_set_add)
-make_fn_spacename_key_attributes_status!(set_remove, async_set_remove)
-make_fn_spacename_key_attributes_status!(set_intersect, async_set_intersect)
-make_fn_spacename_key_attributes_status!(set_union, async_set_union)
-make_fn_spacename_key_attributes_status!(map_remove, async_map_remove)
-
-make_fn_spacename_key_mapattributes_status!(map_add, async_map_add)
-make_fn_spacename_key_mapattributes_status!(map_atomic_add, async_map_atomic_add)
-make_fn_spacename_key_mapattributes_status!(map_atomic_sub, async_map_atomic_sub)
-make_fn_spacename_key_mapattributes_status!(map_atomic_mul, async_map_atomic_mul)
-make_fn_spacename_key_mapattributes_status!(map_atomic_div, async_map_atomic_div)
-make_fn_spacename_key_mapattributes_status!(map_atomic_mod, async_map_atomic_mod)
-make_fn_spacename_key_mapattributes_status!(map_atomic_and, async_map_atomic_and)
-make_fn_spacename_key_mapattributes_status!(map_atomic_or, async_map_atomic_or)
-make_fn_spacename_key_mapattributes_status!(map_atomic_xor, async_map_atomic_xor)
-make_fn_spacename_key_mapattributes_status!(map_string_prepend, async_map_string_prepend)
-make_fn_spacename_key_mapattributes_status!(map_string_append, async_map_string_append)
-
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_add, async_cond_map_add)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_add, async_cond_map_atomic_add)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_sub, async_cond_map_atomic_sub)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_mul, async_cond_map_atomic_mul)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_div, async_cond_map_atomic_div)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_mod, async_cond_map_atomic_mod)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_and, async_cond_map_atomic_and)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_or, async_cond_map_atomic_or)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_xor, async_cond_map_atomic_xor)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_string_prepend, async_cond_map_string_prepend)
-make_fn_spacename_key_predicates_mapattributes_status!(cond_map_string_append, async_cond_map_string_append)
+make_fn_spacename_key_attributes_status!(put, async_put);
+make_fn_spacename_key_attributes_status!(put_if_not_exist, async_put_if_not_exist);
+make_fn_spacename_key_attributes_status!(atomic_add, async_atomic_add);
+make_fn_spacename_key_attributes_status!(atomic_sub, async_atomic_sub);
+make_fn_spacename_key_attributes_status!(atomic_mul, async_atomic_mul);
+make_fn_spacename_key_attributes_status!(atomic_div, async_atomic_div);
+make_fn_spacename_key_attributes_status!(atomic_mod, async_atomic_mod);
+make_fn_spacename_key_attributes_status!(atomic_and, async_atomic_and);
+make_fn_spacename_key_attributes_status!(atomic_or, async_atomic_or);
+make_fn_spacename_key_attributes_status!(atomic_xor, async_atomic_xor);
+make_fn_spacename_key_attributes_status!(string_prepend, async_string_prepend);
+make_fn_spacename_key_attributes_status!(string_append, async_string_append);
+make_fn_spacename_key_attributes_status!(list_lpush, async_list_lpush);
+make_fn_spacename_key_attributes_status!(list_rpush, async_list_rpush);
+make_fn_spacename_key_attributes_status!(set_add, async_set_add);
+make_fn_spacename_key_attributes_status!(set_remove, async_set_remove);
+make_fn_spacename_key_attributes_status!(set_intersect, async_set_intersect);
+make_fn_spacename_key_attributes_status!(set_union, async_set_union);
+make_fn_spacename_key_attributes_status!(map_remove, async_map_remove);
+make_fn_spacename_key_mapattributes_status!(map_add, async_map_add);
+make_fn_spacename_key_mapattributes_status!(map_atomic_add, async_map_atomic_add);
+make_fn_spacename_key_mapattributes_status!(map_atomic_sub, async_map_atomic_sub);
+make_fn_spacename_key_mapattributes_status!(map_atomic_mul, async_map_atomic_mul);
+make_fn_spacename_key_mapattributes_status!(map_atomic_div, async_map_atomic_div);
+make_fn_spacename_key_mapattributes_status!(map_atomic_mod, async_map_atomic_mod);
+make_fn_spacename_key_mapattributes_status!(map_atomic_and, async_map_atomic_and);
+make_fn_spacename_key_mapattributes_status!(map_atomic_or, async_map_atomic_or);
+make_fn_spacename_key_mapattributes_status!(map_atomic_xor, async_map_atomic_xor);
+make_fn_spacename_key_mapattributes_status!(map_string_prepend, async_map_string_prepend);
+make_fn_spacename_key_mapattributes_status!(map_string_append, async_map_string_append);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_add, async_cond_map_add);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_add, async_cond_map_atomic_add);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_sub, async_cond_map_atomic_sub);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_mul, async_cond_map_atomic_mul);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_div, async_cond_map_atomic_div);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_mod, async_cond_map_atomic_mod);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_and, async_cond_map_atomic_and);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_or, async_cond_map_atomic_or);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_atomic_xor, async_cond_map_atomic_xor);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_string_prepend, async_cond_map_string_prepend);
+make_fn_spacename_key_predicates_mapattributes_status!(cond_map_string_append, async_cond_map_string_append);

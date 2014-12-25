@@ -1,4 +1,4 @@
-use std::collections::{HashMap, TreeSet};
+use std::collections::{HashMap, BTreeSet};
 use std::hash::sip::SipState;
 use std::mem::transmute;
 use std::hash::Hash;
@@ -25,9 +25,9 @@ pub enum HyperValue {
     HyperListInt(Vec<i64>),
     HyperListFloat(Vec<f64>),
 
-    HyperSetString(TreeSet<Vec<u8>>),
-    HyperSetInt(TreeSet<i64>),
-    HyperSetFloat(TreeSet<F64>),
+    HyperSetString(BTreeSet<Vec<u8>>),
+    HyperSetInt(BTreeSet<i64>),
+    HyperSetFloat(BTreeSet<F64>),
 
     HyperMapStringString(HashMap<Vec<u8>, Vec<u8>>),
     HyperMapStringInt(HashMap<Vec<u8>, i64>),
@@ -121,31 +121,31 @@ macro_rules! from_hypervalue_impl(
             }
         }
     )
-)
+);
 
-from_hypervalue_impl!(Vec<u8>, HyperString)
-from_hypervalue_impl!(i64, HyperInt)
-from_hypervalue_impl!(f64, HyperFloat)
+from_hypervalue_impl!(Vec<u8>, HyperString);
+from_hypervalue_impl!(i64, HyperInt);
+from_hypervalue_impl!(f64, HyperFloat);
 
-from_hypervalue_impl!(Vec<Vec<u8>>, HyperListString)
-from_hypervalue_impl!(Vec<i64>, HyperListInt)
-from_hypervalue_impl!(Vec<f64>, HyperListFloat)
+from_hypervalue_impl!(Vec<Vec<u8>>, HyperListString);
+from_hypervalue_impl!(Vec<i64>, HyperListInt);
+from_hypervalue_impl!(Vec<f64>, HyperListFloat);
 
-from_hypervalue_impl!(TreeSet<Vec<u8>>, HyperSetString)
-from_hypervalue_impl!(TreeSet<i64>, HyperSetInt)
-from_hypervalue_impl!(TreeSet<F64>, HyperSetFloat)
+from_hypervalue_impl!(BTreeSet<Vec<u8>>, HyperSetString);
+from_hypervalue_impl!(BTreeSet<i64>, HyperSetInt);
+from_hypervalue_impl!(BTreeSet<F64>, HyperSetFloat);
 
-from_hypervalue_impl!(HashMap<Vec<u8>, Vec<u8>>, HyperMapStringString)
-from_hypervalue_impl!(HashMap<Vec<u8>, i64>, HyperMapStringInt)
-from_hypervalue_impl!(HashMap<Vec<u8>, f64>, HyperMapStringFloat)
+from_hypervalue_impl!(HashMap<Vec<u8>, Vec<u8>>, HyperMapStringString);
+from_hypervalue_impl!(HashMap<Vec<u8>, i64>, HyperMapStringInt);
+from_hypervalue_impl!(HashMap<Vec<u8>, f64>, HyperMapStringFloat);
 
-from_hypervalue_impl!(HashMap<i64, Vec<u8>>, HyperMapIntString)
-from_hypervalue_impl!(HashMap<i64, i64>, HyperMapIntInt)
-from_hypervalue_impl!(HashMap<i64, f64>, HyperMapIntFloat)
+from_hypervalue_impl!(HashMap<i64, Vec<u8>>, HyperMapIntString);
+from_hypervalue_impl!(HashMap<i64, i64>, HyperMapIntInt);
+from_hypervalue_impl!(HashMap<i64, f64>, HyperMapIntFloat);
 
-from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString)
-from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt)
-from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat)
+from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
+from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
+from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
 
 #[deriving(Show)]
 pub struct HyperObject {
@@ -279,7 +279,7 @@ impl ToHyperValue for Vec<f64> {
     }
 }
 
-impl<'a> ToHyperValue for TreeSet<&'a str> {
+impl<'a> ToHyperValue for BTreeSet<&'a str> {
     fn to_hyper(self) -> HyperValue {
         HyperSetString(FromIterator::from_iter(self.into_iter().map(|s| {
             s.as_bytes().to_vec()
@@ -288,7 +288,7 @@ impl<'a> ToHyperValue for TreeSet<&'a str> {
 }
 
 
-impl ToHyperValue for TreeSet<String> {
+impl ToHyperValue for BTreeSet<String> {
     fn to_hyper(self) -> HyperValue {
         HyperSetString(FromIterator::from_iter(self.into_iter().map(|s| {
             s.into_bytes()
@@ -296,19 +296,19 @@ impl ToHyperValue for TreeSet<String> {
     }
 }
 
-impl ToHyperValue for TreeSet<Vec<u8>> {
+impl ToHyperValue for BTreeSet<Vec<u8>> {
     fn to_hyper(self) -> HyperValue {
         HyperSetString(self)
     }
 }
 
-impl ToHyperValue for TreeSet<i64> {
+impl ToHyperValue for BTreeSet<i64> {
     fn to_hyper(self) -> HyperValue {
         HyperSetInt(self)
     }
 }
 
-impl ToHyperValue for TreeSet<F64> {
+impl ToHyperValue for BTreeSet<F64> {
     fn to_hyper(self) -> HyperValue {
         HyperSetFloat(self)
     }
