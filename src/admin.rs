@@ -5,6 +5,8 @@ use std::time::duration::Duration;
 use std::sync::Future;
 use std::ptr::null;
 use std::thunk::Thunk;
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::thread::Thread;
 
 use libc::*;
 
@@ -36,7 +38,7 @@ impl Admin {
         } else {
             let (req_tx, req_rx) = channel();
 
-            spawn(move|| {
+            Thread::spawn(move|| {
                 // A list of pending requests
                 let mut pending: Vec<AdminRequest> = Vec::new();
                 let mut timer = Timer::new().unwrap();

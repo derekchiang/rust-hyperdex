@@ -1,5 +1,4 @@
-use std::c_str::CString;
-use std::c_vec::CVec;
+use std::ffi::{CString, c_str_to_bytes};
 
 use hyperdex_admin::*;
 use hyperdex_client::*;
@@ -31,21 +30,28 @@ pub fn get_client_error(client: *mut Struct_hyperdex_client, status: u32) -> Hyp
     }
 }
 
-pub unsafe fn to_bytes(ptr: *const ::libc::c_char) -> Vec<u8> {
-    CString::new(ptr, false).as_bytes().to_vec()
-}
-
 pub unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8> {
-    let cvec = CVec::new(ptr as *mut u8, len as uint);
-    let mut vec = Vec::with_capacity(len as uint);
-    vec.push_all(cvec.as_slice());
-    return vec;
+    return Vec::from_raw_buf(ptr as *const u8, len as usize);
 }
 
 pub unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
-    let mut s = String::from_utf8(to_bytes(ptr)).unwrap();  // TODO: better error handling
-    if s.char_at(s.len() - 1) == '\0' {
-        s.pop();
-    }
-    return s;
+    let bytes = c_str_to_bytes(ptr).into_vec();
+    String::from_utf8(bytes).unwrap()
 }
+
+pub trait ToCStr {
+    fn to_c_str(self) -> CString;
+}
+
+impl<T: ToString> ToCStr for T {
+    fn to_c_str(self) -> CString {
+        CString::from_vec(self.to_string().into_bytes())
+    }
+}
+
+impl ToCStr for Vec<u8> {
+    fn to_c_str(self) -> CString {
+        CString::from_vec(self)
+    }
+}
+

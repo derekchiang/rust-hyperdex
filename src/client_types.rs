@@ -1,7 +1,10 @@
 use std::collections::{HashMap, BTreeSet};
-use std::hash::sip::SipState;
 use std::mem::transmute;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::iter::FromIterator;
+use std::cmp::Ordering;
+use std::hash;
 
 use libc::*;
 
@@ -15,7 +18,7 @@ use self::HyperValue::*;
 use self::HyperState::*;
 use self::HyperObjectKeyError::*;
 
-#[deriving(Show, Clone)]
+#[deriving(Show, Clone, PartialEq)]
 pub enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
@@ -62,17 +65,17 @@ pub struct Request {
 }
 
 pub enum HyperPredicateType {
-    FAIL = HYPERPREDICATE_FAIL as int,
-    EQUALS = HYPERPREDICATE_EQUALS as int,
-    LESS_THAN = HYPERPREDICATE_LESS_THAN as int,
-    LESS_EQUAL = HYPERPREDICATE_LESS_EQUAL as int,
-    GREATER_EQUAL = HYPERPREDICATE_GREATER_EQUAL as int,
-    GREATER_THAN = HYPERPREDICATE_GREATER_THAN as int,
-    REGEX = HYPERPREDICATE_REGEX as int,
-    LENGTH_EQUALS = HYPERPREDICATE_LENGTH_EQUALS as int,
-    LENGTH_LESS_EQUAL = HYPERPREDICATE_LENGTH_LESS_EQUAL as int,
-    LENGTH_GREATER_EQUAL = HYPERPREDICATE_LENGTH_GREATER_EQUAL as int,
-    CONTAINS = HYPERPREDICATE_CONTAINS as int,
+    FAIL = HYPERPREDICATE_FAIL as isize,
+    EQUALS = HYPERPREDICATE_EQUALS as isize,
+    LESS_THAN = HYPERPREDICATE_LESS_THAN as isize,
+    LESS_EQUAL = HYPERPREDICATE_LESS_EQUAL as isize,
+    GREATER_EQUAL = HYPERPREDICATE_GREATER_EQUAL as isize,
+    GREATER_THAN = HYPERPREDICATE_GREATER_THAN as isize,
+    REGEX = HYPERPREDICATE_REGEX as isize,
+    LENGTH_EQUALS = HYPERPREDICATE_LENGTH_EQUALS as isize,
+    LENGTH_LESS_EQUAL = HYPERPREDICATE_LENGTH_LESS_EQUAL as isize,
+    LENGTH_GREATER_EQUAL = HYPERPREDICATE_LENGTH_GREATER_EQUAL as isize,
+    CONTAINS = HYPERPREDICATE_CONTAINS as isize,
 }
 
 pub struct HyperPredicate {
@@ -147,7 +150,7 @@ from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
 from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
 from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
 
-#[deriving(Show)]
+#[deriving(Show, PartialEq)]
 pub struct HyperObject {
     pub map: HashMap<String, HyperValue>,
 }
@@ -387,11 +390,11 @@ impl PartialOrd for F64 {
     fn partial_cmp(&self, other: &F64) -> Option<Ordering> {
         // Kinda hacky, but I think this should work...
         if self > other {
-            Some(Greater)
+            Some(Ordering::Greater)
         } else if self < other {
-            Some(Less)
+            Some(Ordering::Less)
         } else {
-            Some(Equal)
+            Some(Ordering::Equal)
         }
     }
 }
@@ -404,12 +407,11 @@ impl Ord for F64 {
     }
 }
 
-impl Hash for F64 {
-    fn hash(&self, state: &mut SipState) {
+
+impl<H: hash::Hasher + hash::Writer> Hash<H> for F64 {
+    fn hash(&self, state: &mut H) {
         unsafe {
-            let x: u64 = transmute(self);
-            x.hash(state);
-        }
+            transmute::<f64, u64>(self.0)
+        }.hash(state)
     }
 }
-

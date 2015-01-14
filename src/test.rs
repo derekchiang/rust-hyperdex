@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use admin::*;
-use client::*;
 use super::*;
 use super::HyperValue::*;
 use super::HyperPredicateType::*;
@@ -59,8 +57,8 @@ fn test_add_and_get_objects() {
 
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
     match client.put(space_name, "derek", NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
+        "first", "Derek",
+        "last", "Chiang",
     )) {
         Ok(()) => (),
         Err(err) => panic!(err),
@@ -98,18 +96,18 @@ fn test_add_and_search_objects() {
     let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
 
     match client.put(space_name, "derek", NewHyperObject!(
-        "first": "Derek",
-        "last": "Chiang",
-        "age": 20,
+        "first", "Derek",
+        "last", "Chiang",
+        "age", 20,
     )) {
         Ok(()) => (),
         Err(err) => panic!(err),
     }
 
     match client.put(space_name, "robert", NewHyperObject!(
-        "first": "Robert",
-        "last": "Escriva",
-        "age": 25,
+        "first", "Robert",
+        "last", "Escriva",
+        "age", 25,
     )) {
         Ok(()) => (),
         Err(err) => panic!(err),

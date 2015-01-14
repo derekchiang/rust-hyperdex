@@ -1,23 +1,23 @@
-#![macro_escape]
+#![macro_use]
 
 use std::io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
-use std::comm::{Empty, Disconnected};
+use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, BTreeSet};
-use std::c_str::CString;
-use std::vec::raw::from_buf;
+use std::ffi::CString;
 use std::path::BytesContainer;
-use std::ptr::{null, null_mut};
-use std::c_vec::CVec;
+use std::ptr::{null, null_mut, Unique};
 use std::mem::transmute;
 use std::hash::Hash;
-use std::hash::sip::SipState;
 use std::sync::atomic;
+use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicInt;
 use std::sync::Future;
 use std::time::duration::Duration;
 use std::io::timer::sleep;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::thread::Thread;
 
 use libc::*;
 
@@ -33,17 +33,17 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
     let mut attrs = HyperObject::new();
 
     for i in range(0, c_attrs_sz) {
-        let ref attr = *c_attrs.offset(i as int);
+        let ref attr = *c_attrs.offset(i as isize);
         let name = to_string(attr.attr);
         match attr.datatype {
             HYPERDATATYPE_STRING => {
                 attrs.insert(name,
-                             from_buf(attr.value as *const u8, attr.value_sz as uint));
+                             Vec::from_raw_buf(attr.value as *const u8, attr.value_sz as usize));
             },
             HYPERDATATYPE_INT64 => {
                 let mut cint = 0i64;
                 if hyperdex_ds_unpack_int(attr.value as *const i8, attr.value_sz, &mut cint) < 0 {
-                    return Err("Server sent a malformed int".into_string());
+                    return Err("Server sent a malformed int".to_string());
                 }
                 attrs.insert(name, cint);
             },
@@ -51,7 +51,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                 let mut cdouble = 0f64;
                 if hyperdex_ds_unpack_float(attr.value as *const i8,
                                             attr.value_sz, &mut cdouble) < 0 {
-                    return Err("Server sent a malformed float".into_string());
+                    return Err("Server sent a malformed float".to_string());
                 }
                 attrs.insert(name, cdouble);
             },
@@ -68,7 +68,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         lst.push(to_bytes_with_len(cstr, cstr_sz));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted list of strings".into_string());
+                        return Err("Server sent a corrupted list of strings".to_string());
                     } else {
                         break;
                     }
@@ -85,7 +85,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         lst.push(num);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted list of integers".into_string());
+                        return Err("Server sent a corrupted list of integers".to_string());
                     } else {
                         break;
                     }
@@ -103,7 +103,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         lst.push(num);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted list of floats".into_string());
+                        return Err("Server sent a corrupted list of floats".to_string());
                     } else {
                         break;
                     }
@@ -124,7 +124,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         set.insert(to_bytes_with_len(cstr, cstr_sz));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted set of strings".into_string());
+                        return Err("Server sent a corrupted set of strings".to_string());
                     } else {
                         break;
                     }
@@ -141,7 +141,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         set.insert(num);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted set of integers".into_string());
+                        return Err("Server sent a corrupted set of integers".to_string());
                     } else {
                         break;
                     }
@@ -159,7 +159,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         set.insert(F64(num));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted set of floats".into_string());
+                        return Err("Server sent a corrupted set of floats".to_string());
                     } else {
                         break;
                     }
@@ -184,7 +184,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                         map.insert(to_bytes_with_len(ckey, ckey_sz),
                                    to_bytes_with_len(cval, cval_sz));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of strings to strings".into_string());
+                        return Err("Server sent a corrupted map of strings to strings".to_string());
                     } else {
                         break;
                     }
@@ -205,7 +205,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(to_bytes_with_len(ckey, ckey_sz), cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of strings to integers".into_string());
+                        return Err("Server sent a corrupted map of strings to integers".to_string());
                     } else {
                         break;
                     }
@@ -226,7 +226,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(to_bytes_with_len(ckey, ckey_sz), cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of strings to floats".into_string());
+                        return Err("Server sent a corrupted map of strings to floats".to_string());
                     } else {
                         break;
                     }
@@ -247,7 +247,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(ckey, to_bytes_with_len(cval, cval_sz));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of integers to strings".into_string());
+                        return Err("Server sent a corrupted map of integers to strings".to_string());
                     } else {
                         break;
                     }
@@ -265,7 +265,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(ckey, cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of integers to integers".into_string());
+                        return Err("Server sent a corrupted map of integers to integers".to_string());
                     } else {
                         break;
                     }
@@ -284,7 +284,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(ckey, cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of integers to floats".into_string());
+                        return Err("Server sent a corrupted map of integers to floats".to_string());
                     } else {
                         break;
                     }
@@ -305,7 +305,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(F64(ckey), to_bytes_with_len(cval, cval_sz));
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of floats to strings".into_string());
+                        return Err("Server sent a corrupted map of floats to strings".to_string());
                     } else {
                         break;
                     }
@@ -324,7 +324,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(F64(ckey), cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of floats to integers".into_string());
+                        return Err("Server sent a corrupted map of floats to integers".to_string());
                     } else {
                         break;
                     }
@@ -343,7 +343,7 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     if status > 0 {
                         map.insert(F64(ckey), cval);
                     } else if status < 0 {
-                        return Err("Server sent a corrupted map of floats to floats".into_string());
+                        return Err("Server sent a corrupted map of floats to floats".to_string());
                     } else {
                         break;
                     }
@@ -384,7 +384,7 @@ unsafe fn convert_cstring(arena: *mut Struct_hyperdex_ds_arena, s: String) -> Re
     let mut cs = null();
     let mut sz = 0;
     if hyperdex_ds_copy_string(arena, cstr.as_ptr(), (cstr.len() + 1) as u64, &mut err, &mut cs, &mut sz) < 0 {
-        Err("failed to allocate memory".into_string())
+        Err("failed to allocate memory".to_string())
     } else {
         Ok(cs)
     }
@@ -394,7 +394,7 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
     let mut status = 0;
     let mut cs = null();
     let mut sz = 0;
-    let mem_err = Err("failed to allocate memory".into_string());
+    let mem_err = Err("failed to allocate memory".to_string());
 
     match val {
         HyperString(s) => {
@@ -499,7 +499,7 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
 
 #[macro_export]
 macro_rules! NewHyperObject(
-    ($($key: expr: $value: expr,)*) => (
+    ($($key: expr, $value: expr,)*) => (
         {
             let mut obj = HyperObject::new();
             $(
@@ -514,18 +514,27 @@ macro_rules! NewHyperObject(
 macro_rules! NewHyperMapAttribute(
     ($attr: expr, $key: expr, $value: expr) => (
         HyperMapAttribute {
-            attr: $attr.into_string(),
+            attr: $attr.to_string(),
             key: $key.to_hyper(),
             value: $value.to_hyper(),
         }
     );
 );
 
-#[deriving(Clone)]
 pub struct InnerClient {
-    ptr: *mut Struct_hyperdex_client,
+    ptr: Unique<Struct_hyperdex_client>,
     ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
     err_tx: Sender<HyperError>,
+}
+
+impl Clone for InnerClient {
+    fn clone(&self) -> InnerClient {
+        return InnerClient {
+            ptr: Unique(self.ptr.0),
+            ops: self.ops.clone(),
+            err_tx: self.err_tx.clone(),
+        }
+    }
 }
 
 // impl Drop for InnerClient {
@@ -542,34 +551,34 @@ impl InnerClient {
         unsafe {
             loop {
                 match shutdown_rx.try_recv() {
-                    Err(Empty) => (),
+                    Err(TryRecvError::Empty) => (),
                     // Otherwise, the client has been dropped
                     _ => {
-                        hyperdex_client_destroy(self.ptr);
+                        hyperdex_client_destroy(self.ptr.0);
                         return;
                     }
                 }
 
-                hyperdex_client_block(self.ptr, 250);  // prevent busy spinning
+                hyperdex_client_block(self.ptr.0, 250);  // prevent busy spinning
                 let mut loop_status = 0u32;
-                let reqid = hyperdex_client_loop(self.ptr, 0, &mut loop_status);
+                let reqid = hyperdex_client_loop(self.ptr.0, 0, &mut loop_status);
                 if reqid < 0 && loop_status == HYPERDEX_CLIENT_TIMEOUT {
                     // pass
                 } else if reqid < 0 && loop_status == HYPERDEX_CLIENT_NONEPENDING {
                     // pass
                 } else if reqid < 0 {
-                    self.err_tx.send(get_client_error(self.ptr, loop_status));
+                    self.err_tx.send(get_client_error(self.ptr.0, loop_status));
                 } else {
-                    let mut ops = &mut*self.ops.lock();
-                    match ops.find_copy(&reqid) {
+                    let mut ops = &mut*self.ops.lock().unwrap();
+                    match ops.get(&reqid) {
                         None => {},  // Is this an error case?  It happens occationally
 
-                        Some(HyperStateOp(op_tx)) => {
-                            op_tx.send(get_client_error(self.ptr, loop_status));
+                        Some(&HyperStateOp(op_tx)) => {
+                            op_tx.send(get_client_error(self.ptr.0, loop_status));
                             ops.remove(&reqid);
                         },
 
-                        Some(HyperStateSearch(state)) => {
+                        Some(&HyperStateSearch(state)) => {
                             if *state.status == HYPERDEX_CLIENT_SUCCESS {
                                 match build_hyperobject(*state.attrs, *state.attrs_sz) {
                                     Ok(attrs) => {
@@ -594,7 +603,7 @@ impl InnerClient {
                                 // this seems to be a bug in Rust... state.res_tx sometimes
                                 // doesn't get dropped properly
                             } else {
-                                state.res_tx.send(Err(get_client_error(self.ptr, *state.status)));
+                                state.res_tx.send(Err(get_client_error(self.ptr.0, *state.status)));
                             }
                         },
                     }
@@ -612,44 +621,41 @@ macro_rules! make_fn_spacename_key_status_attributes(
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
             let key_str = key.to_string();
             let space_str = space.to_c_str();
 
-            let status_ptr = transmute(box 0u32);
-
-            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
-            let attrs_sz_ptr = transmute(box 0u32);
+            let status = box 0u32;
+            let attrs = box Unique::null();
+            let attrs_sz = box 0u64;
 
             let (err_tx, err_rx) = channel();
 
             let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock();
+                let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
-                                                               status_ptr, attrs_ptr, attrs_sz_ptr);
+                                                               &mut *status,
+                                                               &mut *attrs.0, &mut *attrs_sz);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
 
             Future::from_fn(move|| {
-                let status: Box<u32> = transmute(status_ptr);
-                let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
-                let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
-                let err = err_rx.recv();
+                let err = err_rx.recv().unwrap();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr, *status))
+                    Err(get_client_error(inner_client.ptr.0, *status))
                 } else {
-                    let res = match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
+                    let res = match build_hyperobject(*attrs.0, *attrs_sz) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -661,7 +667,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(*attrs_ptr, *attrs_sz_ptr);
+                    hyperdex_client_destroy_attrs(*attrs.0, *attrs_sz);
                     res
                 }
             })
@@ -684,14 +690,13 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
             let key_str = key.to_string();
 
-            let status_ptr = transmute(box 0u32);
-
-            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
-            let attrs_sz_ptr = transmute(box 0u32);
+            let status_ptr = box 0u32;
+            let attrs_ptr = box Unique::null();
+            let attrs_sz_ptr = box 0u64;
 
             let arena = hyperdex_ds_arena_create();
             let mut c_attrs = match convert_attributenames(arena,
@@ -711,33 +716,31 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
 
             let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock();
+                let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
-                                                               status_ptr, attrs_ptr, attrs_sz_ptr);
+                                                               &mut *status_ptr,
+                                                               &mut *attrs_ptr.0, &mut *attrs_sz_ptr);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
             hyperdex_ds_arena_destroy(arena);
 
             Future::from_fn(move|| {
-                let status: Box<u32> = transmute(status_ptr);
-                let attrs: Box<*mut Struct_hyperdex_client_attribute> = transmute(attrs_ptr);
-                let attrs_sz: Box<u32> = transmute(attrs_sz_ptr);
                 let err = err_rx.recv();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
-                } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr, *status))
+                } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr.0, *status_ptr))
                 } else {
-                    let res = match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
+                    let res = match build_hyperobject(*attrs_ptr.0, *attrs_sz_ptr) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -749,7 +752,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(*attrs_ptr, *attrs_sz_ptr);
+                    hyperdex_client_destroy_attrs(*attrs_ptr.0, *attrs_sz_ptr);
                     res
                 }
             })
@@ -770,12 +773,12 @@ macro_rules! make_fn_spacename_key_attributes_status(
         pub fn $async_name<S, K>(&mut self, space: S, key: K, value: HyperObject)
             -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
             let space_str = space.to_c_str();
             let key_str = key.to_string();
 
-            let status_ptr = transmute(box 0u32);
+            let status_ptr = box 0u32;
 
             let arena = hyperdex_ds_arena_create();
             let obj = match convert_hyperobject(arena, value) {
@@ -787,16 +790,16 @@ macro_rules! make_fn_spacename_key_attributes_status(
 
             let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock();
+                let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                obj.as_ptr(), obj.len() as u64,
-                                                               status_ptr);
+                                                               &mut *status_ptr);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
@@ -804,11 +807,10 @@ macro_rules! make_fn_spacename_key_attributes_status(
             hyperdex_ds_arena_destroy(arena);
             Future::from_fn(move|| {
                 let err = err_rx.recv();
-                let status: Box<u32> = transmute(status_ptr);
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
-                } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr, *status))
+                } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr.0, *status_ptr))
                 } else {
                     Ok(())
                 }
@@ -829,12 +831,12 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
             pub fn $async_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
                 -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
                 let inner_client =
-                    self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                    self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
                 let key_str = key.to_string();
                 let space_str = space.to_c_str();
 
-                let status_ptr = transmute(box 0u32);
+                let status_ptr = box 0u32;
 
                 let arena = hyperdex_ds_arena_create();
                 let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
@@ -846,16 +848,16 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
 
                 let mut ops_mutex = inner_client.ops.clone();
                 {
-                    let mut ops = &mut*ops_mutex.lock();
+                    let mut ops = &mut*ops_mutex.lock().unwrap();
                     let req_id =
-                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
                                                 space_str.as_ptr() as *const i8,
                                                 key_str.as_ptr() as *const i8,
                                                 key_str.len() as u64,
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
-                                                status_ptr);
+                                                &mut *status_ptr);
                     if req_id < 0 {
-                        return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                        return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                     }
                     ops.insert(req_id, HyperStateOp(err_tx));
                 }
@@ -863,11 +865,10 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
                 hyperdex_ds_arena_destroy(arena);
                 Future::from_fn(move|| {
                     let err = err_rx.recv();
-                    let status: Box<u32> = transmute(status_ptr);
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
-                    } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                        Err(get_client_error(inner_client.ptr, *status))
+                    } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
+                        Err(get_client_error(inner_client.ptr.0, *status_ptr))
                     } else {
                         Ok(())
                     }
@@ -889,12 +890,12 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                                      checks: Vec<HyperPredicate>, mapattrs: Vec<HyperMapAttribute>)
                 -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
                 let inner_client =
-                    self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                    self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
                 let key_str = key.to_string();
                 let space_str = space.to_c_str();
 
-                let status_ptr = transmute(box 0u32);
+                let status_ptr = box 0u32;
 
                 let arena = hyperdex_ds_arena_create();
                 let c_checks = match convert_predicates(arena, checks) {
@@ -922,17 +923,17 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
 
                 let mut ops_mutex = inner_client.ops.clone();
                 {
-                    let mut ops = &mut*ops_mutex.lock();
+                    let mut ops = &mut*ops_mutex.lock().unwrap();
                     let req_id =
-                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr,
+                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
                                                 space_str.as_ptr() as *const i8,
                                                 key_str.as_ptr() as *const i8,
                                                 key_str.len() as u64,
                                                 c_checks.as_ptr(), c_checks.len() as u64,
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
-                                                status_ptr);
+                                                &mut *status_ptr);
                     if req_id < 0 {
-                        return Future::from_value(Err(get_client_error(inner_client.ptr, 0)));
+                        return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                     }
                     ops.insert(req_id, HyperStateOp(err_tx));
                 }
@@ -940,11 +941,10 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                 hyperdex_ds_arena_destroy(arena);
                 Future::from_fn(move|| {
                     let err = err_rx.recv();
-                    let status: Box<u32> = transmute(status_ptr);
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
-                    } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                        Err(get_client_error(inner_client.ptr, *status))
+                    } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
+                        Err(get_client_error(inner_client.ptr.0, *status_ptr))
                     } else {
                         Ok(())
                     }
@@ -983,12 +983,12 @@ impl Client {
                 let ops = Arc::new(Mutex::new(HashMap::new()));
                 let (shutdown_tx, shutdown_rx) = channel();
                 let mut inner_client = InnerClient {
-                    ptr: ptr,
+                    ptr: Unique(ptr),
                     ops: ops.clone(),
                     err_tx: err_tx.clone(),
                 };
                 let mut ic_clone = inner_client.clone();
-                spawn(move|| {
+                Thread::spawn(move|| {
                     ic_clone.run_forever(shutdown_rx);
                 });
                 inner_clients.push(inner_client);
@@ -1006,7 +1006,7 @@ impl Client {
     pub fn search<S>(&mut self, space: S, checks: Vec<HyperPredicate>)
         -> Receiver<Result<HyperObject, HyperError>> where S: ToCStr { unsafe {
             let inner_client =
-                self.inner_clients[self.counter.fetch_add(1, atomic::Relaxed) as uint % self.inner_clients.len()].clone();
+                self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
             let (res_tx, res_rx) = channel();
 
@@ -1030,15 +1030,15 @@ impl Client {
 
             let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock();
+                let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    hyperdex_client_search(inner_client.ptr,
+                    hyperdex_client_search(inner_client.ptr.0,
                                            space_str.as_ptr() as *const i8,
                                            c_checks.as_ptr(),
                                            c_checks.len() as u64,
                                            status_ptr, attrs_ptr, attrs_sz_ptr);
                 if req_id < 0 {
-                    res_tx.send(Err(get_client_error(inner_client.ptr, 0)));
+                    res_tx.send(Err(get_client_error(inner_client.ptr.0, 0)));
                     return res_rx;
                 }
 
