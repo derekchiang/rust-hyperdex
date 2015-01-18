@@ -627,7 +627,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let space_str = space.to_c_str();
 
             let status = box 0u32;
-            let attrs = box Unique::null();
+            let attrs = Unique(null::<Struct_hyperdex_client_attribute>() as *mut Struct_hyperdex_client_attribute);
             let attrs_sz = box 0u64;
 
             let (err_tx, err_rx) = channel();
@@ -641,7 +641,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                &mut *status,
-                                                               &mut *attrs.0, &mut *attrs_sz);
+                                                               &mut (attrs.0 as *const Struct_hyperdex_client_attribute), &mut *attrs_sz);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
@@ -655,7 +655,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 } else if *status != HYPERDEX_CLIENT_SUCCESS {
                     Err(get_client_error(inner_client.ptr.0, *status))
                 } else {
-                    let res = match build_hyperobject(*attrs.0, *attrs_sz) {
+                    let res = match build_hyperobject(attrs.0, *attrs_sz) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -667,7 +667,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(*attrs.0, *attrs_sz);
+                    hyperdex_client_destroy_attrs(attrs.0, *attrs_sz);
                     res
                 }
             })
@@ -676,7 +676,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
 
         pub fn $fn_name<S, K>(&mut self, space: S, key: K)
             -> Result<HyperObject, HyperError> where S: ToCStr, K: ToString {
-            self.$async_name(space, key).unwrap()
+            self.$async_name(space, key).into_inner()
         }
         }
     );
@@ -695,7 +695,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             let key_str = key.to_string();
 
             let status_ptr = box 0u32;
-            let attrs_ptr = box Unique::null();
+            let attrs_ptr = Unique::null();
             let attrs_sz_ptr = box 0u64;
 
             let arena = hyperdex_ds_arena_create();
@@ -725,7 +725,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
                                                                &mut *status_ptr,
-                                                               &mut *attrs_ptr.0, &mut *attrs_sz_ptr);
+                                                               &mut (attrs_ptr.0 as *const Struct_hyperdex_client_attribute), &mut *attrs_sz_ptr);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
@@ -734,13 +734,13 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             hyperdex_ds_arena_destroy(arena);
 
             Future::from_fn(move|| {
-                let err = err_rx.recv();
+                let err = err_rx.recv().unwrap();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
                     Err(get_client_error(inner_client.ptr.0, *status_ptr))
                 } else {
-                    let res = match build_hyperobject(*attrs_ptr.0, *attrs_sz_ptr) {
+                    let res = match build_hyperobject(attrs_ptr.0, *attrs_sz_ptr) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -752,7 +752,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(*attrs_ptr.0, *attrs_sz_ptr);
+                    hyperdex_client_destroy_attrs(attrs_ptr.0, *attrs_sz_ptr);
                     res
                 }
             })
@@ -761,7 +761,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
 
         pub fn $fn_name<S, K, A>(&mut self, space: S, key: K, attrs: Vec<A>)
             -> Result<HyperObject, HyperError> where S: ToCStr, K: ToString, A: ToString {
-            self.$async_name(space, key, attrs).unwrap()
+            self.$async_name(space, key, attrs).into_inner()
         }
         }
     );
@@ -806,7 +806,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
 
             hyperdex_ds_arena_destroy(arena);
             Future::from_fn(move|| {
-                let err = err_rx.recv();
+                let err = err_rx.recv().unwrap();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
@@ -819,7 +819,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
 
         pub fn $fn_name<S, K>(&mut self, space: S, key: K, value: HyperObject)
             -> Result<(), HyperError> where S: ToCStr, K: ToString {
-            self.$async_name(space, key, value).unwrap()
+            self.$async_name(space, key, value).into_inner()
         }
         }
     );
@@ -864,7 +864,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
 
                 hyperdex_ds_arena_destroy(arena);
                 Future::from_fn(move|| {
-                    let err = err_rx.recv();
+                    let err = err_rx.recv().unwrap();
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
                     } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
@@ -877,7 +877,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
 
             pub fn $fn_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
                 -> Result<(), HyperError> where S: ToCStr, K: ToString {
-                self.$async_name(space, key, mapattrs).unwrap()
+                self.$async_name(space, key, mapattrs).into_inner()
             }
         }
     )
@@ -940,7 +940,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
 
                 hyperdex_ds_arena_destroy(arena);
                 Future::from_fn(move|| {
-                    let err = err_rx.recv();
+                    let err = err_rx.recv().unwrap();
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
                     } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
@@ -954,7 +954,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
             pub fn $fn_name<S, K>(&mut self, space: S, key: K,
                                   checks: Vec<HyperPredicate>, mapattrs: Vec<HyperMapAttribute>)
                 -> Result<(), HyperError> where S: ToCStr, K: ToString {
-                self.$async_name(space, key, checks, mapattrs).unwrap()
+                self.$async_name(space, key, checks, mapattrs).into_inner()
             }
         }
     )
