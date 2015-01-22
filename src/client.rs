@@ -595,9 +595,9 @@ impl InnerClient {
                                 }
                                 hyperdex_client_destroy_attrs(state.attrs.0, *state.attrs_sz);
                             } else if *state.status == HYPERDEX_CLIENT_SEARCHDONE {
-                                match ops.remove(&reqid) {
-                                    Some(HyperStateSearch(state)) => state,
-                                    x => panic!(x),
+                                let state = match ops.remove(&reqid).unwrap() {
+                                    HyperStateSearch(state) => state,
+                                    x => panic!("ops should only contain HyperStateSearch"),
                                 };
                                 let res_tx = state.res_tx;
                                 // this seems to be a bug in Rust... state.res_tx sometimes

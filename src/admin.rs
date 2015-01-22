@@ -106,8 +106,11 @@ impl Admin {
                             };
                         },
                         // Wake up and call loop()
-                        Ok(()) = periodic.recv() => {
-                            loop_fn(&mut pending);
+                        option = periodic.recv() => {
+                            match option {
+                                Ok(()) => loop_fn(&mut pending),
+                                Err(_) => (),
+                            }
                         }
                     )
                 }
