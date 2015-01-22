@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::iter::FromIterator;
 use std::cmp::Ordering;
+use std::ptr::Unique;
 use std::hash;
 
 use libc::*;
@@ -48,7 +49,7 @@ pub enum HyperValue {
 #[deriving(Clone)]
 pub struct SearchState {
     pub status: Box<Enum_hyperdex_client_returncode>,
-    pub attrs: Box<*const Struct_hyperdex_client_attribute>,
+    pub attrs: Unique<Struct_hyperdex_client_attribute>,
     pub attrs_sz: Box<size_t>,
     pub res_tx: Sender<Result<HyperObject, HyperError>>,
 }
@@ -169,8 +170,8 @@ impl HyperObject {
     pub fn get<K, T>(&self, attr: K) -> Result<T, HyperObjectKeyError> where K: ToString, T: FromHyperValue {
         let val_opt = self.map.get(&attr.to_string());
         match val_opt {
-            Some(val) => {
-                match FromHyperValue::from_hyper(val.clone()) {
+            Some(&val) => {
+                match FromHyperValue::from_hyper(val) {
                     Ok(ok) => Ok(ok),
                     Err(err) => Err(err),
                 }
@@ -218,7 +219,7 @@ pub trait ToHyperValue {
 
 impl<'a> ToHyperValue for &'a str {
     fn to_hyper(self) -> HyperValue {
-        let s = self.into_string();
+        let s = self.to_string();
         HyperValue::HyperString(s.into_bytes())
     }
 }

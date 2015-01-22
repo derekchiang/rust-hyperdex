@@ -580,7 +580,7 @@ impl InnerClient {
 
                         Some(&HyperStateSearch(state)) => {
                             if *state.status == HYPERDEX_CLIENT_SUCCESS {
-                                match build_hyperobject(*state.attrs, *state.attrs_sz) {
+                                match build_hyperobject(state.attrs.0, *state.attrs_sz) {
                                     Ok(attrs) => {
                                         state.res_tx.send(Ok(attrs));
                                     },
@@ -593,7 +593,7 @@ impl InnerClient {
                                         state.res_tx.send(Err(herr));
                                     }
                                 }
-                                hyperdex_client_destroy_attrs(*state.attrs, *state.attrs_sz);
+                                hyperdex_client_destroy_attrs(state.attrs.0, *state.attrs_sz);
                             } else if *state.status == HYPERDEX_CLIENT_SEARCHDONE {
                                 match ops.remove(&reqid) {
                                     Some(HyperStateSearch(state)) => state,
@@ -1024,7 +1024,7 @@ impl Client {
             };
 
             let status_ptr = transmute(box 0u32);
-            let attrs_ptr = transmute(box null::<*mut Struct_hyperdex_client_attribute>());
+            let attrs_ptr = Unique::null();
             let attrs_sz_ptr = transmute(box 0u32);
             let space_str = space.to_c_str();
 
@@ -1036,7 +1036,7 @@ impl Client {
                                            space_str.as_ptr() as *const i8,
                                            c_checks.as_ptr(),
                                            c_checks.len() as u64,
-                                           status_ptr, attrs_ptr, attrs_sz_ptr);
+                                           status_ptr, &mut (attrs_ptr.0 as *const Struct_hyperdex_client_attribute), attrs_sz_ptr);
                 if req_id < 0 {
                     res_tx.send(Err(get_client_error(inner_client.ptr.0, 0)));
                     return res_rx;
@@ -1044,7 +1044,7 @@ impl Client {
 
                 let mut state = SearchState {
                     status: transmute(status_ptr),
-                    attrs: transmute(attrs_ptr),
+                    attrs: attrs_ptr,
                     attrs_sz: transmute(attrs_sz_ptr),
                     res_tx: res_tx,
                 };
