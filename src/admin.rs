@@ -15,7 +15,7 @@ use hyperdex::*;
 use hyperdex_admin::*;
 
 pub struct Admin {
-    ptr: Unique<Struct_hyperdex_admin>,
+    ptr: *mut Struct_hyperdex_admin,
     req_tx: Sender<AdminRequest>,
 }
 
@@ -36,7 +36,6 @@ impl Admin {
         if ptr.is_null() {
             Err(format!("Could not create hyperdex_admin ({})", coordinator))
         } else {
-            let ptr = Unique(ptr);
             let (req_tx, req_rx) = channel();
 
             Thread::spawn(move|| {
@@ -54,7 +53,7 @@ impl Admin {
                     }
 
                     let mut status = 0;
-                    let ret = hyperdex_admin_loop(ptr.0, -1, &mut status);
+                    let ret = hyperdex_admin_loop(ptr, -1, &mut status);
                     if ret < 0 {
                         if ret == -1 {
                             return;
@@ -80,12 +79,12 @@ impl Admin {
                             },
                             _ => {
                                 if req.failure.is_some() {
-                                    req.failure.unwrap().invoke(get_admin_error(ptr.0, *req.status));
+                                    req.failure.unwrap().invoke(get_admin_error(ptr, *req.status));
                                 }
                             }
                         }
                     } else if req.failure.is_some() {
-                        req.failure.unwrap().invoke(get_admin_error(ptr.0, status));
+                        req.failure.unwrap().invoke(get_admin_error(ptr, status));
                     }
                 };
 
@@ -100,7 +99,7 @@ impl Admin {
                                 },
                                 Err(_) => {
                                     // TODO: this is causing trouble for some reason
-                                    hyperdex_admin_destroy(ptr.0);
+                                    hyperdex_admin_destroy(ptr);
                                     return;
                                 }
                             };
@@ -148,12 +147,12 @@ impl Admin {
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "add" => {
-                    hyperdex_admin_add_space(self.ptr.0,
+                    hyperdex_admin_add_space(self.ptr,
                                              desc_str.as_ptr() as *const i8,
                                              status_ptr)
                 },
                 "remove" => {
-                    hyperdex_admin_rm_space(self.ptr.0,
+                    hyperdex_admin_rm_space(self.ptr,
                                             desc_str.as_ptr() as *const i8,
                                             status_ptr)
                 },
@@ -162,7 +161,7 @@ impl Admin {
                 }
             };
             if req_id == -1 {
-                return Future::from_value(Err(get_admin_error(self.ptr.0, *status_ptr)))
+                return Future::from_value(Err(get_admin_error(self.ptr, *status_ptr)))
             }
 
             let res_tx2 = res_tx.clone();
@@ -209,17 +208,17 @@ impl Admin {
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "dump_config" => {
-                    hyperdex_admin_dump_config(self.ptr.0, &mut *status, &mut (res.0 as *const i8))
+                    hyperdex_admin_dump_config(self.ptr, &mut *status, &mut (res.0 as *const i8))
                 },
                 "list_spaces" => {
-                    hyperdex_admin_list_spaces(self.ptr.0, &mut *status, &mut (res.0 as *const i8))
+                    hyperdex_admin_list_spaces(self.ptr, &mut *status, &mut (res.0 as *const i8))
                 },
                 _ => {
                     panic!("wrong func name");
                 }
             };
             if req_id == -1 {
-                return Future::from_value(Err(get_admin_error(self.ptr.0, *status)));
+                return Future::from_value(Err(get_admin_error(self.ptr, *status)));
             }
 
             let res_tx2 = res_tx.clone();
@@ -248,9 +247,9 @@ impl Admin {
             let mut status_ptr = transmute(box 0u32);
 
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_read_only(self.ptr.0, if ro { 1 } else { 0 }, status_ptr);
+            let req_id = hyperdex_admin_read_only(self.ptr, if ro { 1 } else { 0 }, status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr));
+                return Err(get_admin_error(self.ptr, *status_ptr));
             }
 
             let res_tx2 = res_tx.clone();
@@ -276,9 +275,9 @@ impl Admin {
             let mut status_ptr = transmute(box 0u32);
 
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_wait_until_stable(self.ptr.0, status_ptr);
+            let req_id = hyperdex_admin_wait_until_stable(self.ptr, status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr));
+                return Err(get_admin_error(self.ptr, *status_ptr));
             }
 
             let res_tx2 = res_tx.clone();
@@ -306,9 +305,9 @@ impl Admin {
             let space_str = space.to_c_str();
 
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_fault_tolerance(self.ptr.0, space_str.as_ptr(), ft, status_ptr);
+            let req_id = hyperdex_admin_fault_tolerance(self.ptr, space_str.as_ptr(), ft, status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr));
+                return Err(get_admin_error(self.ptr, *status_ptr));
             }
 
             let res_tx2 = res_tx.clone();
@@ -335,9 +334,9 @@ impl Admin {
 
             let desc_str = desc.to_c_str();
 
-            let res = hyperdex_admin_validate_space(self.ptr.0, desc_str.as_ptr(), status_ptr);
+            let res = hyperdex_admin_validate_space(self.ptr, desc_str.as_ptr(), status_ptr);
             if res == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr));
+                return Err(get_admin_error(self.ptr, *status_ptr));
             }
 
             return Ok(());
@@ -351,12 +350,12 @@ impl Admin {
             let target_str = target.to_c_str();
             let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_mv_space(self.ptr.0,
+            let req_id = hyperdex_admin_mv_space(self.ptr,
                                                  source_str.as_ptr(),
                                                  target_str.as_ptr(),
                                                  status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr))
+                return Err(get_admin_error(self.ptr, *status_ptr))
             }
 
             let res_tx2 = res_tx.clone();
@@ -384,12 +383,12 @@ impl Admin {
             let attr_str = attribute.to_c_str();
             let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_add_index(self.ptr.0,
+            let req_id = hyperdex_admin_add_index(self.ptr,
                                                   space_str.as_ptr(),
                                                   attr_str.as_ptr(),
                                                   status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr))
+                return Err(get_admin_error(self.ptr, *status_ptr))
             }
 
             let res_tx2 = res_tx.clone();
@@ -414,9 +413,9 @@ impl Admin {
         unsafe {
             let mut status_ptr = transmute(box 0u32);
             let (res_tx, res_rx) = channel();
-            let req_id = hyperdex_admin_rm_index(self.ptr.0, idx, status_ptr);
+            let req_id = hyperdex_admin_rm_index(self.ptr, idx, status_ptr);
             if req_id == -1 {
-                return Err(get_admin_error(self.ptr.0, *status_ptr))
+                return Err(get_admin_error(self.ptr, *status_ptr))
             }
 
             let res_tx2 = res_tx.clone();
@@ -442,7 +441,7 @@ impl Admin {
 // impl Drop for Admin {
     // fn drop(&mut self) {
         // unsafe {
-            // hyperdex_admin_destroy(self.ptr.0);
+            // hyperdex_admin_destroy(self.ptr);
         // }
     // }
 // }

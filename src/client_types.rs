@@ -19,7 +19,7 @@ use self::HyperValue::*;
 use self::HyperState::*;
 use self::HyperObjectKeyError::*;
 
-#[deriving(Show, Clone, PartialEq)]
+#[derive(Show, Clone, PartialEq)]
 pub enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
@@ -46,7 +46,6 @@ pub enum HyperValue {
     HyperMapFloatFloat(HashMap<F64, f64>),
 }
 
-#[deriving(Clone)]
 pub struct SearchState {
     pub status: Box<Enum_hyperdex_client_returncode>,
     pub attrs: Unique<Struct_hyperdex_client_attribute>,
@@ -54,7 +53,6 @@ pub struct SearchState {
     pub res_tx: Sender<Result<HyperObject, HyperError>>,
 }
 
-#[deriving(Clone)]
 pub enum HyperState {
     HyperStateOp(Sender<HyperError>),  // for calls that don't return values
     HyperStateSearch(SearchState),  // for calls that do return values
@@ -102,7 +100,7 @@ pub struct HyperMapAttribute {
     pub value: HyperValue,
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum HyperObjectKeyError {
     KeyDoesNotExist,
     ObjectIsAnotherType,
@@ -151,7 +149,7 @@ from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
 from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
 from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
 
-#[deriving(Show, PartialEq)]
+#[derive(Show, PartialEq)]
 pub struct HyperObject {
     pub map: HashMap<String, HyperValue>,
 }
@@ -170,8 +168,8 @@ impl HyperObject {
     pub fn get<K, T>(&self, attr: K) -> Result<T, HyperObjectKeyError> where K: ToString, T: FromHyperValue {
         let val_opt = self.map.get(&attr.to_string());
         match val_opt {
-            Some(&val) => {
-                match FromHyperValue::from_hyper(val) {
+            Some(&ref val) => {
+                match FromHyperValue::from_hyper(val.clone()) {
                     Ok(ok) => Ok(ok),
                     Err(err) => Err(err),
                 }
@@ -374,7 +372,7 @@ impl ToHyperValue for HashMap<F64, f64> {
 
 /// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
 /// by wrapping them in a struct and implement those traits
-#[deriving(Show, Clone)]
+#[derive(Show, Clone)]
 pub struct F64(pub f64);
 
 impl PartialEq for F64 {

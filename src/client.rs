@@ -398,8 +398,9 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
 
     match val {
         HyperString(s) => {
+            let slen = s.len() as u64;
             let cstr = s.to_c_str();
-            if hyperdex_ds_copy_string(arena, cstr.as_ptr() as *const i8, s.len() as u64,
+            if hyperdex_ds_copy_string(arena, cstr.as_ptr() as *const i8, slen,
                                        &mut status, &mut cs, &mut sz) < 0 {
                 mem_err
             } else {
@@ -425,7 +426,7 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
             if ds_lst.is_null() {
                 mem_err
             } else {
-                for s in ls.iter() {
+                for s in ls.into_iter() {
                     let cstr = s.to_c_str();
                     if hyperdex_ds_list_append_string(ds_lst, cstr.as_ptr(),
                                                       cstr.len() as u64, &mut status) < 0 {
@@ -570,15 +571,16 @@ impl InnerClient {
                     self.err_tx.send(get_client_error(self.ptr.0, loop_status));
                 } else {
                     let mut ops = &mut*self.ops.lock().unwrap();
+                    let mut remove_req = false;
                     match ops.get(&reqid) {
                         None => {},  // Is this an error case?  It happens occationally
 
-                        Some(&HyperStateOp(op_tx)) => {
+                        Some(&HyperStateOp(ref op_tx)) => {
                             op_tx.send(get_client_error(self.ptr.0, loop_status));
-                            ops.remove(&reqid);
+                            remove_req = true;
                         },
 
-                        Some(&HyperStateSearch(state)) => {
+                        Some(&HyperStateSearch(ref state)) => {
                             if *state.status == HYPERDEX_CLIENT_SUCCESS {
                                 match build_hyperobject(state.attrs.0, *state.attrs_sz) {
                                     Ok(attrs) => {
@@ -595,17 +597,16 @@ impl InnerClient {
                                 }
                                 hyperdex_client_destroy_attrs(state.attrs.0, *state.attrs_sz);
                             } else if *state.status == HYPERDEX_CLIENT_SEARCHDONE {
-                                let state = match ops.remove(&reqid).unwrap() {
-                                    HyperStateSearch(state) => state,
-                                    x => panic!("ops should only contain HyperStateSearch"),
-                                };
-                                let res_tx = state.res_tx;
+                                remove_req = true;
                                 // this seems to be a bug in Rust... state.res_tx sometimes
                                 // doesn't get dropped properly
                             } else {
                                 state.res_tx.send(Err(get_client_error(self.ptr.0, *state.status)));
                             }
                         },
+                    }
+                    if remove_req {
+                        ops.remove(&reqid);   
                     }
                 }
             }
@@ -626,9 +627,9 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let key_str = key.to_string();
             let space_str = space.to_c_str();
 
-            let status = box 0u32;
-            let attrs = Unique(null::<Struct_hyperdex_client_attribute>() as *mut Struct_hyperdex_client_attribute);
-            let attrs_sz = box 0u64;
+            let mut status = box 0u32;
+            let mut attrs = Unique(null::<Struct_hyperdex_client_attribute>() as *mut Struct_hyperdex_client_attribute);
+            let mut attrs_sz = box 0u64;
 
             let (err_tx, err_rx) = channel();
 
@@ -694,9 +695,9 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
 
             let key_str = key.to_string();
 
-            let status_ptr = box 0u32;
-            let attrs_ptr = Unique::null();
-            let attrs_sz_ptr = box 0u64;
+            let mut status_ptr = box 0u32;
+            let mut attrs_ptr = Unique::null();
+            let mut attrs_sz_ptr = box 0u64;
 
             let arena = hyperdex_ds_arena_create();
             let mut c_attrs = match convert_attributenames(arena,
@@ -778,7 +779,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
             let space_str = space.to_c_str();
             let key_str = key.to_string();
 
-            let status_ptr = box 0u32;
+            let mut status_ptr = box 0u32;
 
             let arena = hyperdex_ds_arena_create();
             let obj = match convert_hyperobject(arena, value) {
@@ -836,7 +837,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
                 let key_str = key.to_string();
                 let space_str = space.to_c_str();
 
-                let status_ptr = box 0u32;
+                let mut status_ptr = box 0u32;
 
                 let arena = hyperdex_ds_arena_create();
                 let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
@@ -895,7 +896,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                 let key_str = key.to_string();
                 let space_str = space.to_c_str();
 
-                let status_ptr = box 0u32;
+                let mut status_ptr = box 0u32;
 
                 let arena = hyperdex_ds_arena_create();
                 let c_checks = match convert_predicates(arena, checks) {

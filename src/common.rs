@@ -3,7 +3,7 @@ use std::ffi::{CString, c_str_to_bytes};
 use hyperdex_admin::*;
 use hyperdex_client::*;
 
-#[deriving(Show)]
+#[derive(Show)]
 pub struct HyperError {
     pub status: u32,
     pub message: String,
