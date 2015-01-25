@@ -13,6 +13,8 @@ pub struct Struct_hyperdex_client_attribute {
 }
 unsafe impl Send for Struct_hyperdex_client_attribute {}
 unsafe impl Sync for Struct_hyperdex_client_attribute {}
+unsafe impl Send for *const Struct_hyperdex_client_attribute {}
+unsafe impl Sync for *const Struct_hyperdex_client_attribute {}
 #[repr(C)]
 pub struct Struct_hyperdex_client_map_attribute {
     pub attr: *const ::libc::c_char,

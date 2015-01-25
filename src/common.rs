@@ -1,13 +1,20 @@
 use std::ffi::{CString, c_str_to_bytes};
+use std::fmt::{Display, Formatter, Error};
 
 use hyperdex_admin::*;
 use hyperdex_client::*;
 
-#[derive(Show)]
 pub struct HyperError {
     pub status: u32,
     pub message: String,
     pub location: String,
+}
+
+impl Display for HyperError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        Display::fmt(format!("HyperDex error:\n\tstatus: {}\n\tmessage: {}\n\tlocation: {}\n",
+                             self.status, self.message, self.location).as_slice(), f)
+    }
 }
 
 pub fn get_admin_error(admin: *mut Struct_hyperdex_admin, status: u32) -> HyperError {

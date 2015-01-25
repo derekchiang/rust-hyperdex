@@ -19,7 +19,7 @@ use self::HyperValue::*;
 use self::HyperState::*;
 use self::HyperObjectKeyError::*;
 
-#[derive(Show, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HyperValue {
     HyperString(Vec<u8>),
     HyperInt(i64),
@@ -48,7 +48,7 @@ pub enum HyperValue {
 
 pub struct SearchState {
     pub status: Box<Enum_hyperdex_client_returncode>,
-    pub attrs: Unique<Struct_hyperdex_client_attribute>,
+    pub attrs: Box<*const Struct_hyperdex_client_attribute>,
     pub attrs_sz: Box<size_t>,
     pub res_tx: Sender<Result<HyperObject, HyperError>>,
 }
@@ -100,10 +100,20 @@ pub struct HyperMapAttribute {
     pub value: HyperValue,
 }
 
-#[derive(Show)]
 pub enum HyperObjectKeyError {
     KeyDoesNotExist,
     ObjectIsAnotherType,
+}
+
+use std::fmt::{Display, Formatter, Error};
+
+impl Display for HyperObjectKeyError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        Display::fmt(match *self {
+            HyperObjectKeyError::KeyDoesNotExist => "the key does not exist",
+            HyperObjectKeyError::ObjectIsAnotherType => "the object is of another type"
+        }, f)
+    }
 }
 
 pub trait FromHyperValue {
@@ -149,7 +159,7 @@ from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
 from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
 from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
 
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct HyperObject {
     pub map: HashMap<String, HyperValue>,
 }
@@ -372,7 +382,7 @@ impl ToHyperValue for HashMap<F64, f64> {
 
 /// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
 /// by wrapping them in a struct and implement those traits
-#[derive(Show, Clone)]
+#[derive(Debug, Clone)]
 pub struct F64(pub f64);
 
 impl PartialEq for F64 {

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use super::*;
 use super::HyperValue::*;
@@ -19,7 +20,7 @@ tolerate 2 failures";
 
 #[test]
 fn test_add_and_rm_space() {
-    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    let admin = Admin::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
 
     match admin.add_space(space_desc) {
         Ok(()) => (),
@@ -31,16 +32,16 @@ fn test_add_and_rm_space() {
 
 #[test]
 fn test_get_nonexistent_objects() {
-    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    let admin = Admin::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
 
     match admin.add_space(space_desc) {
         Ok(()) => (),
         Err(err) => panic!(format!("{}", err)),
     };
 
-    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    let mut client = Client::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
     match client.get(space_name, "lol") {
-        Ok(obj) => panic!("wrongly getting an object: {}", obj),
+        Ok(obj) => panic!("wrongly getting an object: {:?}", obj),
         Err(err) => assert!(err.status == HYPERDEX_CLIENT_NOTFOUND),
     }
 
@@ -49,13 +50,13 @@ fn test_get_nonexistent_objects() {
 
 #[test]
 fn test_add_and_get_objects() {
-    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    let admin = Admin::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
     match admin.add_space(space_desc) {
         Ok(()) => (),
-        Err(err) => panic!(err),
+        Err(err) => panic!(format!("{}", err)),
     };
 
-    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    let mut client = Client::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
     match client.put(space_name, "derek", NewHyperObject!(
         "first", "Derek",
         "last", "Chiang",
@@ -87,13 +88,13 @@ fn test_add_and_get_objects() {
 
 #[test]
 fn test_add_and_search_objects() {
-    let admin = Admin::new(from_str(coord_addr).unwrap()).unwrap();
+    let admin = Admin::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
     match admin.add_space(space_desc) {
         Ok(()) => (),
-        Err(err) => panic!(err),
+        Err(err) => panic!(format!("{}", err)),
     };
 
-    let mut client = Client::new(from_str(coord_addr).unwrap()).unwrap();
+    let mut client = Client::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
 
     match client.put(space_name, "derek", NewHyperObject!(
         "first", "Derek",
@@ -119,7 +120,7 @@ fn test_add_and_search_objects() {
     obj.insert("age", 30);
 
     let fut = client.async_put(space_name, "emin", obj);
-    match fut.unwrap() {
+    match fut.into_inner() {
         Ok(()) => (),
         Err(err) => panic!(err),
     }
@@ -133,7 +134,7 @@ fn test_add_and_search_objects() {
         let name: Vec<u8> = obj.get("first").unwrap();
         let age: i64 = obj.get("age").unwrap();
         assert!(age <= 25);
-        println!("{} is {} years old", name, age);
+        println!("{:?} is {} years old", name, age);
     }
 
     admin.remove_space(space_name).unwrap();

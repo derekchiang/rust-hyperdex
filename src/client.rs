@@ -582,7 +582,7 @@ impl InnerClient {
 
                         Some(&HyperStateSearch(ref state)) => {
                             if *state.status == HYPERDEX_CLIENT_SUCCESS {
-                                match build_hyperobject(state.attrs.0, *state.attrs_sz) {
+                                match build_hyperobject(*state.attrs, *state.attrs_sz) {
                                     Ok(attrs) => {
                                         state.res_tx.send(Ok(attrs));
                                     },
@@ -595,7 +595,7 @@ impl InnerClient {
                                         state.res_tx.send(Err(herr));
                                     }
                                 }
-                                hyperdex_client_destroy_attrs(state.attrs.0, *state.attrs_sz);
+                                hyperdex_client_destroy_attrs(*state.attrs, *state.attrs_sz);
                             } else if *state.status == HYPERDEX_CLIENT_SEARCHDONE {
                                 remove_req = true;
                                 // this seems to be a bug in Rust... state.res_tx sometimes
@@ -628,7 +628,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let space_str = space.to_c_str();
 
             let mut status = box 0u32;
-            let mut attrs = Unique(null::<Struct_hyperdex_client_attribute>() as *mut Struct_hyperdex_client_attribute);
+            let mut attrs = box null();
             let mut attrs_sz = box 0u64;
 
             let (err_tx, err_rx) = channel();
@@ -642,7 +642,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                &mut *status,
-                                                               &mut (attrs.0 as *const Struct_hyperdex_client_attribute), &mut *attrs_sz);
+                                                               &mut *attrs, &mut *attrs_sz);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
@@ -656,7 +656,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 } else if *status != HYPERDEX_CLIENT_SUCCESS {
                     Err(get_client_error(inner_client.ptr.0, *status))
                 } else {
-                    let res = match build_hyperobject(attrs.0, *attrs_sz) {
+                    let res = match build_hyperobject(*attrs, *attrs_sz) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -668,7 +668,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(attrs.0, *attrs_sz);
+                    hyperdex_client_destroy_attrs(*attrs, *attrs_sz);
                     res
                 }
             })
@@ -696,7 +696,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             let key_str = key.to_string();
 
             let mut status_ptr = box 0u32;
-            let mut attrs_ptr = Unique::null();
+            let mut attrs_ptr = box null();
             let mut attrs_sz_ptr = box 0u64;
 
             let arena = hyperdex_ds_arena_create();
@@ -726,7 +726,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
                                                                &mut *status_ptr,
-                                                               &mut (attrs_ptr.0 as *const Struct_hyperdex_client_attribute), &mut *attrs_sz_ptr);
+                                                               &mut *attrs_ptr, &mut *attrs_sz_ptr);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
                 }
@@ -741,7 +741,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                 } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
                     Err(get_client_error(inner_client.ptr.0, *status_ptr))
                 } else {
-                    let res = match build_hyperobject(attrs_ptr.0, *attrs_sz_ptr) {
+                    let res = match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
                         Ok(obj) => {
                             Ok(obj)
                         },
@@ -753,7 +753,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                             })
                         }
                     };
-                    hyperdex_client_destroy_attrs(attrs_ptr.0, *attrs_sz_ptr);
+                    hyperdex_client_destroy_attrs(*attrs_ptr, *attrs_sz_ptr);
                     res
                 }
             })
@@ -1024,9 +1024,9 @@ impl Client {
                 },
             };
 
-            let status_ptr = transmute(box 0u32);
-            let attrs_ptr = Unique::null();
-            let attrs_sz_ptr = transmute(box 0u32);
+            let mut status_ptr = box 0u32;
+            let mut attrs_ptr = box null();
+            let mut attrs_sz_ptr = box 0u64;
             let space_str = space.to_c_str();
 
             let mut ops_mutex = inner_client.ops.clone();
@@ -1037,16 +1037,18 @@ impl Client {
                                            space_str.as_ptr() as *const i8,
                                            c_checks.as_ptr(),
                                            c_checks.len() as u64,
-                                           status_ptr, &mut (attrs_ptr.0 as *const Struct_hyperdex_client_attribute), attrs_sz_ptr);
+                                           &mut *status_ptr,
+                                           &mut *attrs_ptr,
+                                           &mut *attrs_sz_ptr);
                 if req_id < 0 {
                     res_tx.send(Err(get_client_error(inner_client.ptr.0, 0)));
                     return res_rx;
                 }
 
                 let mut state = SearchState {
-                    status: transmute(status_ptr),
+                    status: status_ptr,
                     attrs: attrs_ptr,
-                    attrs_sz: transmute(attrs_sz_ptr),
+                    attrs_sz: attrs_sz_ptr,
                     res_tx: res_tx,
                 };
 
