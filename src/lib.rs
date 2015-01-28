@@ -5,7 +5,7 @@
 extern crate libc;
 
 pub use common::HyperError;
-pub use client::Client;
+pub use client::*;
 pub use client_types::*;
 pub use admin::Admin;
 
