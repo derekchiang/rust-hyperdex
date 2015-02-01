@@ -1,6 +1,6 @@
 #![macro_use]
 
-use std::io::net::ip::SocketAddr;
+use std::old_io::net::ip::SocketAddr;
 use std::os::{num_cpus, errno};
 use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, BTreeSet};
@@ -14,7 +14,7 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicInt;
 use std::sync::Future;
 use std::time::duration::Duration;
-use std::io::timer::sleep;
+use std::old_io::timer::sleep;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread::Thread;

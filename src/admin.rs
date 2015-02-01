@@ -1,6 +1,6 @@
 use std::mem::transmute;
-use std::io::timer::{sleep, Timer};
-use std::io::net::ip::SocketAddr;
+use std::old_io::timer::{sleep, Timer};
+use std::old_io::net::ip::SocketAddr;
 use std::time::duration::Duration;
 use std::sync::Future;
 use std::thunk::Thunk;
