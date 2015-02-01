@@ -683,6 +683,57 @@ macro_rules! make_fn_spacename_key_status_attributes(
     );
 );
 
+macro_rules! make_fn_spacename_key_status(
+    ($fn_name: ident, $async_name: ident) => (
+        impl Client {
+        pub fn $async_name<S, K>(&mut self, space: S, key: K)
+            -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString {
+            unsafe {
+            let inner_client =
+                self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
+
+            let key_str = key.to_string();
+            let space_str = space.to_c_str();
+            let mut status = box 0u32;
+
+            let (err_tx, err_rx) = channel();
+
+            let mut ops_mutex = inner_client.ops.clone();
+            {
+                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let req_id =
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                                                               space_str.as_ptr() as *const i8,
+                                                               key_str.as_ptr() as *const i8,
+                                                               key_str.len() as u64,
+                                                               &mut *status);
+                if req_id < 0 {
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                }
+                ops.insert(req_id, HyperStateOp(err_tx));
+            }
+
+            Future::from_fn(move|| {
+                let err = err_rx.recv().unwrap();
+                if err.status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(err)
+                } else if *status != HYPERDEX_CLIENT_SUCCESS {
+                    Err(get_client_error(inner_client.ptr.0, *status))
+                } else {
+                    Ok(())
+                }
+            })
+            }
+        }
+
+        pub fn $fn_name<S, K>(&mut self, space: S, key: K)
+            -> Result<(), HyperError> where S: ToCStr, K: ToString {
+            self.$async_name(space, key).into_inner()
+        }
+        }
+    );
+);
+
 macro_rules! make_fn_spacename_key_attributenames_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
@@ -884,6 +935,80 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
     )
 );
 
+macro_rules! make_fn_spacename_key_predicates_attributes_status(
+    ($fn_name: ident, $async_name: ident) => (
+        impl Client {
+            pub fn $async_name<S, K>(&mut self, space: S, key: K, checks: Vec<HyperPredicate>, value: HyperObject)
+                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+                    let inner_client =
+                        self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
+
+                    let (res_tx, res_rx) = channel();
+
+                    let arena = hyperdex_ds_arena_create();
+                    let c_checks = match convert_predicates(arena, checks) {
+                        Ok(x) => x,
+                        Err(err) => {
+                            return Future::from_value(Err(HyperError {
+                                status: 0,
+                                message: err,
+                                location: String::new(),
+                            }));
+                        },
+                    };
+
+                    let obj = match convert_hyperobject(arena, value) {
+                        Ok(x) => x,
+                        Err(err) => panic!(err),
+                    };
+
+
+                    let mut status_ptr = box 0u32;
+
+                    let space_str = space.to_c_str();
+                    let key_str = key.to_string();
+
+                    let mut ops_mutex = inner_client.ops.clone();
+                    {
+                        let mut ops = &mut*ops_mutex.lock().unwrap();
+                        let req_id = 
+                            concat_idents!(hyperdex_client_, $fn_name)(
+                                inner_client.ptr.0,
+                                space_str.as_ptr() as *const i8,
+                                key_str.as_ptr() as *const i8,
+                                key_str.len() as u64,
+                                c_checks.as_ptr(),
+                                c_checks.len() as u64,
+                                obj.as_ptr(),
+                                obj.len() as u64,
+                                &mut *status_ptr);
+                        if req_id < 0 {
+                            return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                        }
+                        ops.insert(req_id, HyperStateOp(res_tx));
+                    }
+                    hyperdex_ds_arena_destroy(arena);
+                    Future::from_fn(move|| {
+                        let err = res_rx.recv().unwrap();
+                        if err.status != HYPERDEX_CLIENT_SUCCESS {
+                            Err(err)
+                        } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
+                            Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                }
+            }
+
+            pub fn $fn_name<S, K>(&mut self, space: S, key: K, checks: Vec<HyperPredicate>, value: HyperObject)
+                -> Result<(), HyperError> where S: ToCStr, K: ToString {
+                self.$async_name(space, key, checks, value).into_inner()
+            }
+        }
+    )
+);
+
 macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
@@ -1074,11 +1199,13 @@ impl Client {
     // }
 }
 
+make_fn_spacename_key_status!(del, async_del);
 make_fn_spacename_key_status_attributes!(get, async_get);
 
 make_fn_spacename_key_attributenames_status_attributes!(get_partial, async_get_partial);
 
 make_fn_spacename_key_attributes_status!(put, async_put);
+make_fn_spacename_key_predicates_attributes_status!(cond_put, async_cond_put);
 make_fn_spacename_key_attributes_status!(put_if_not_exist, async_put_if_not_exist);
 make_fn_spacename_key_attributes_status!(atomic_add, async_atomic_add);
 make_fn_spacename_key_attributes_status!(atomic_sub, async_atomic_sub);
