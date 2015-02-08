@@ -5,7 +5,6 @@ use std::os::{num_cpus, errno};
 use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, BTreeSet};
 use std::ffi::CString;
-use std::path::BytesContainer;
 use std::ptr::{null, null_mut, Unique};
 use std::mem::transmute;
 use std::hash::Hash;
