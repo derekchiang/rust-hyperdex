@@ -100,6 +100,7 @@ pub struct HyperMapAttribute {
     pub value: HyperValue,
 }
 
+#[derive(Debug)]
 pub enum HyperObjectKeyError {
     KeyDoesNotExist,
     ObjectIsAnotherType,

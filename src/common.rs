@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter, Error};
 use hyperdex_admin::*;
 use hyperdex_client::*;
 
+#[derive(Debug, Clone)]
 pub struct HyperError {
     pub status: u32,
     pub message: String,
