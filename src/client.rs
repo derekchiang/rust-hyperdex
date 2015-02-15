@@ -549,6 +549,7 @@ impl InnerClient {
 
     fn run_forever(&mut self, shutdown_rx: Receiver<()>) {
         unsafe {
+            let mut req_buf = Vec::new();
             loop {
                 match shutdown_rx.try_recv() {
                     Err(TryRecvError::Empty) => (),
@@ -560,8 +561,20 @@ impl InnerClient {
                 }
 
                 hyperdex_client_block(self.ptr.ptr, 250);  // prevent busy spinning
-                let mut loop_status = 0u32;
-                let reqid = hyperdex_client_loop(self.ptr.ptr, 0, &mut loop_status);
+
+                let mut reqid = 0;
+                let mut loop_status = 0;
+
+                match req_buf.pop() {
+                    Some((r, l)) => {
+                        reqid = r;
+                        loop_status = l;
+                    },
+                    None => {
+                        reqid = hyperdex_client_loop(self.ptr.ptr, 0, &mut loop_status);
+                    },
+                }
+
                 if reqid < 0 && loop_status == HYPERDEX_CLIENT_TIMEOUT {
                     // pass
                 } else if reqid < 0 && loop_status == HYPERDEX_CLIENT_NONEPENDING {
@@ -572,7 +585,12 @@ impl InnerClient {
                     let mut ops = &mut*self.ops.lock().unwrap();
                     let mut remove_req = false;
                     match ops.get(&reqid) {
-                        None => {},  // Is this an error case?  It happens occationally
+                        None => {
+                            // This is a very rare race condition.  It happens when the request
+                            // completes before the corresponding SearchState is inserted into
+                            // the hashmap.
+                            req_buf.push((reqid, loop_status));
+                        },
 
                         Some(&HyperStateOp(ref op_tx)) => {
                             op_tx.send(get_client_error(self.ptr.ptr, loop_status));
@@ -609,7 +627,7 @@ impl InnerClient {
                     }
                 }
             }
-        }
+        }        
     }
 }
 
