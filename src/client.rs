@@ -530,7 +530,7 @@ pub struct InnerClient {
 impl Clone for InnerClient {
     fn clone(&self) -> InnerClient {
         return InnerClient {
-            ptr: Unique(self.ptr.0),
+            ptr: Unique(self.ptr.ptr),
             ops: self.ops.clone(),
             err_tx: self.err_tx.clone(),
         }
@@ -554,20 +554,20 @@ impl InnerClient {
                     Err(TryRecvError::Empty) => (),
                     // Otherwise, the client has been dropped
                     _ => {
-                        hyperdex_client_destroy(self.ptr.0);
+                        hyperdex_client_destroy(self.ptr.ptr);
                         return;
                     }
                 }
 
-                hyperdex_client_block(self.ptr.0, 250);  // prevent busy spinning
+                hyperdex_client_block(self.ptr.ptr, 250);  // prevent busy spinning
                 let mut loop_status = 0u32;
-                let reqid = hyperdex_client_loop(self.ptr.0, 0, &mut loop_status);
+                let reqid = hyperdex_client_loop(self.ptr.ptr, 0, &mut loop_status);
                 if reqid < 0 && loop_status == HYPERDEX_CLIENT_TIMEOUT {
                     // pass
                 } else if reqid < 0 && loop_status == HYPERDEX_CLIENT_NONEPENDING {
                     // pass
                 } else if reqid < 0 {
-                    self.err_tx.send(get_client_error(self.ptr.0, loop_status));
+                    self.err_tx.send(get_client_error(self.ptr.ptr, loop_status));
                 } else {
                     let mut ops = &mut*self.ops.lock().unwrap();
                     let mut remove_req = false;
@@ -575,7 +575,7 @@ impl InnerClient {
                         None => {},  // Is this an error case?  It happens occationally
 
                         Some(&HyperStateOp(ref op_tx)) => {
-                            op_tx.send(get_client_error(self.ptr.0, loop_status));
+                            op_tx.send(get_client_error(self.ptr.ptr, loop_status));
                             remove_req = true;
                         },
 
@@ -600,7 +600,7 @@ impl InnerClient {
                                 // this seems to be a bug in Rust... state.res_tx sometimes
                                 // doesn't get dropped properly
                             } else {
-                                state.res_tx.send(Err(get_client_error(self.ptr.0, *state.status)));
+                                state.res_tx.send(Err(get_client_error(self.ptr.ptr, *state.status)));
                             }
                         },
                     }
@@ -636,14 +636,14 @@ macro_rules! make_fn_spacename_key_status_attributes(
             {
                 let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                &mut *status,
                                                                &mut *attrs, &mut *attrs_sz);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
@@ -653,7 +653,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr.0, *status))
+                    Err(get_client_error(inner_client.ptr.ptr, *status))
                 } else {
                     let res = match build_hyperobject(*attrs, *attrs_sz) {
                         Ok(obj) => {
@@ -701,13 +701,13 @@ macro_rules! make_fn_spacename_key_status(
             {
                 let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                &mut *status);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
@@ -717,7 +717,7 @@ macro_rules! make_fn_spacename_key_status(
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr.0, *status))
+                    Err(get_client_error(inner_client.ptr.ptr, *status))
                 } else {
                     Ok(())
                 }
@@ -769,7 +769,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             {
                 let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
@@ -778,7 +778,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                                                                &mut *status_ptr,
                                                                &mut *attrs_ptr, &mut *attrs_sz_ptr);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
@@ -789,7 +789,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                    Err(get_client_error(inner_client.ptr.ptr, *status_ptr))
                 } else {
                     let res = match build_hyperobject(*attrs_ptr, *attrs_sz_ptr) {
                         Ok(obj) => {
@@ -843,14 +843,14 @@ macro_rules! make_fn_spacename_key_attributes_status(
             {
                 let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                    concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                obj.as_ptr(), obj.len() as u64,
                                                                &mut *status_ptr);
                 if req_id < 0 {
-                    return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                    return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
@@ -861,7 +861,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
                     Err(err)
                 } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
-                    Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                    Err(get_client_error(inner_client.ptr.ptr, *status_ptr))
                 } else {
                     Ok(())
                 }
@@ -901,14 +901,14 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
                 {
                     let mut ops = &mut*ops_mutex.lock().unwrap();
                     let req_id =
-                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                 space_str.as_ptr() as *const i8,
                                                 key_str.as_ptr() as *const i8,
                                                 key_str.len() as u64,
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                                 &mut *status_ptr);
                     if req_id < 0 {
-                        return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                        return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                     }
                     ops.insert(req_id, HyperStateOp(err_tx));
                 }
@@ -919,7 +919,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
                     } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
-                        Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                        Err(get_client_error(inner_client.ptr.ptr, *status_ptr))
                     } else {
                         Ok(())
                     }
@@ -972,7 +972,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                         let mut ops = &mut*ops_mutex.lock().unwrap();
                         let req_id = 
                             concat_idents!(hyperdex_client_, $fn_name)(
-                                inner_client.ptr.0,
+                                inner_client.ptr.ptr,
                                 space_str.as_ptr() as *const i8,
                                 key_str.as_ptr() as *const i8,
                                 key_str.len() as u64,
@@ -982,7 +982,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                                 obj.len() as u64,
                                 &mut *status_ptr);
                         if req_id < 0 {
-                            return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                            return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                         }
                         ops.insert(req_id, HyperStateOp(res_tx));
                     }
@@ -992,7 +992,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                         if err.status != HYPERDEX_CLIENT_SUCCESS {
                             Err(err)
                         } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
-                            Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                            Err(get_client_error(inner_client.ptr.ptr, *status_ptr))
                         } else {
                             Ok(())
                         }
@@ -1050,7 +1050,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                 {
                     let mut ops = &mut*ops_mutex.lock().unwrap();
                     let req_id =
-                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.0,
+                        concat_idents!(hyperdex_client_, $fn_name)(inner_client.ptr.ptr,
                                                 space_str.as_ptr() as *const i8,
                                                 key_str.as_ptr() as *const i8,
                                                 key_str.len() as u64,
@@ -1058,7 +1058,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                                 &mut *status_ptr);
                     if req_id < 0 {
-                        return Future::from_value(Err(get_client_error(inner_client.ptr.0, 0)));
+                        return Future::from_value(Err(get_client_error(inner_client.ptr.ptr, 0)));
                     }
                     ops.insert(req_id, HyperStateOp(err_tx));
                 }
@@ -1069,7 +1069,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                     if err.status != HYPERDEX_CLIENT_SUCCESS {
                         Err(err)
                     } else if *status_ptr != HYPERDEX_CLIENT_SUCCESS {
-                        Err(get_client_error(inner_client.ptr.0, *status_ptr))
+                        Err(get_client_error(inner_client.ptr.ptr, *status_ptr))
                     } else {
                         Ok(())
                     }
@@ -1157,7 +1157,7 @@ impl Client {
             {
                 let mut ops = &mut*ops_mutex.lock().unwrap();
                 let req_id =
-                    hyperdex_client_search(inner_client.ptr.0,
+                    hyperdex_client_search(inner_client.ptr.ptr,
                                            space_str.as_ptr() as *const i8,
                                            c_checks.as_ptr(),
                                            c_checks.len() as u64,
@@ -1165,7 +1165,7 @@ impl Client {
                                            &mut *attrs_ptr,
                                            &mut *attrs_sz_ptr);
                 if req_id < 0 {
-                    res_tx.send(Err(get_client_error(inner_client.ptr.0, 0)));
+                    res_tx.send(Err(get_client_error(inner_client.ptr.ptr, 0)));
                     return res_rx;
                 }
 

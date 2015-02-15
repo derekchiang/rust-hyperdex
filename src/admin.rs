@@ -208,10 +208,10 @@ impl Admin {
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "dump_config" => {
-                    hyperdex_admin_dump_config(self.ptr, &mut *status, &mut (res.0 as *const i8))
+                    hyperdex_admin_dump_config(self.ptr, &mut *status, &mut (res.ptr as *const i8))
                 },
                 "list_spaces" => {
-                    hyperdex_admin_list_spaces(self.ptr, &mut *status, &mut (res.0 as *const i8))
+                    hyperdex_admin_list_spaces(self.ptr, &mut *status, &mut (res.ptr as *const i8))
                 },
                 _ => {
                     panic!("wrong func name");
@@ -226,7 +226,7 @@ impl Admin {
                 id: req_id,
                 status: status,
                 success: Some(Thunk::new(move|| {
-                    let res = to_string(res.0);
+                    let res = to_string(res.ptr);
                     res_tx.send(Ok(res));
                 })),
                 failure: Some(Thunk::with_arg(move|err| {
