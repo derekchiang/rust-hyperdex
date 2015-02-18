@@ -441,16 +441,319 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
                 }
             }
         },
-        _ => {
-            panic!("TODO");
-        }
-        // HyperSetString(ss) => {
-            // let ds_set = hyperdex_ds_allocate_set(arena);
-            // for s in ss.iter() {
-                // let cstr = s.to_c_str();
-                // if hyperdex_ds_set_insert_string(ds_set, cstr.as_ptr(), cstr.len(), &status)
-            // }
-        // }
+        HyperListInt(ls) => {
+            let ds_lst = hyperdex_ds_allocate_list(arena);
+            if ds_lst.is_null() {
+                mem_err
+            } else {
+                for d in ls.into_iter() {
+                    if hyperdex_ds_list_append_int(ds_lst, d, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_list_finalize(ds_lst, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperListFloat(ls) => {
+            let ds_lst = hyperdex_ds_allocate_list(arena);
+            if ds_lst.is_null() {
+                mem_err
+            } else {
+                for f in ls.into_iter() {
+                    if hyperdex_ds_list_append_float(ds_lst, f, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_list_finalize(ds_lst, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperSetString(set) => {
+            let ds_set = hyperdex_ds_allocate_set(arena);
+            if ds_set.is_null() {
+                mem_err
+            } else {
+                for s in set.into_iter() {
+                    let cstr = s.to_c_str();
+                    if hyperdex_ds_set_insert_string(ds_set, cstr.as_ptr(),
+                                                     cstr.len() as u64, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_set_finalize(ds_set, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperSetInt(set) => {
+            let ds_set = hyperdex_ds_allocate_set(arena);
+            if ds_set.is_null() {
+                mem_err
+            } else {
+                for d in set.into_iter() {
+                    if hyperdex_ds_set_insert_int(ds_set, d, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_set_finalize(ds_set, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperSetFloat(set) => {
+            let ds_set = hyperdex_ds_allocate_set(arena);
+            if ds_set.is_null() {
+                mem_err
+            } else {
+                for F64(f) in set.into_iter() {
+                    if hyperdex_ds_set_insert_float(ds_set, f, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_set_finalize(ds_set, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapStringString(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    let cstr = k.to_c_str();
+                    if hyperdex_ds_map_insert_key_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                    let cstr = v.to_c_str();
+                    if hyperdex_ds_map_insert_val_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapStringInt(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    let cstr = k.to_c_str();
+                    if hyperdex_ds_map_insert_key_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_int(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapStringFloat(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    let cstr = k.to_c_str();
+                    if hyperdex_ds_map_insert_key_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_float(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapIntString(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_int(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    let cstr = v.to_c_str();
+                    if hyperdex_ds_map_insert_val_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapIntInt(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_int(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_int(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapIntFloat(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (k, v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_int(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_float(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapFloatString(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (F64(k), v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_float(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    let cstr = v.to_c_str();
+                    if hyperdex_ds_map_insert_val_string(ds_map,
+                                                         cstr.as_ptr(), cstr.len() as u64,
+                                                         &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapFloatInt(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (F64(k), v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_float(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_int(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
+        HyperMapFloatFloat(map) => {
+            let ds_map = hyperdex_ds_allocate_map(arena);
+            if ds_map.is_null() {
+                mem_err
+            } else {
+                for (F64(k), v) in map.into_iter() {
+                    if hyperdex_ds_map_insert_key_float(ds_map, k, &mut status) < 0 {
+                        return mem_err;
+                    }
+                    if hyperdex_ds_map_insert_val_float(ds_map, v, &mut status) < 0 {
+                        return mem_err;
+                    }
+                }
+                let mut dt = 0;
+
+                if hyperdex_ds_map_finalize(ds_map, &mut status, &mut cs, &mut sz, &mut dt) < 0 {
+                    mem_err
+                } else {
+                    Ok((cs, sz, dt))
+                }
+            }
+        },
     }
 }
 
