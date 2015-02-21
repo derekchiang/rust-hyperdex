@@ -22,8 +22,8 @@ pub struct Admin {
 pub struct AdminRequest {
     id: int64_t,
     status: Box<u32>,
-    success: Option<Thunk>,
-    failure: Option<Thunk<HyperError, ()>>,
+    success: Option<Thunk<'static>>,
+    failure: Option<Thunk<'static, HyperError, ()>>,
 }
 
 impl Admin {
@@ -203,15 +203,15 @@ impl Admin {
     fn async_dump_config_or_list_spaces(&self, func: &str) -> Future<Result<String, HyperError>> {
         unsafe {
             let mut status = box 0u32;
-            let res = Unique(null::<i8>() as *mut i8);
+            let res = Unique::new(null::<i8>() as *mut i8);
 
             let (res_tx, res_rx) = channel();
             let req_id = match func {
                 "dump_config" => {
-                    hyperdex_admin_dump_config(self.ptr, &mut *status, &mut (res.ptr as *const i8))
+                    hyperdex_admin_dump_config(self.ptr, &mut *status, &mut (*res as *const i8))
                 },
                 "list_spaces" => {
-                    hyperdex_admin_list_spaces(self.ptr, &mut *status, &mut (res.ptr as *const i8))
+                    hyperdex_admin_list_spaces(self.ptr, &mut *status, &mut (*res as *const i8))
                 },
                 _ => {
                     panic!("wrong func name");
@@ -226,7 +226,7 @@ impl Admin {
                 id: req_id,
                 status: status,
                 success: Some(Thunk::new(move|| {
-                    let res = to_string(res.ptr);
+                    let res = to_string(*res);
                     res_tx.send(Ok(res));
                 })),
                 failure: Some(Thunk::with_arg(move|err| {

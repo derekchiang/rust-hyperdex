@@ -417,9 +417,8 @@ impl Ord for F64 {
     }
 }
 
-
-impl<H: hash::Hasher + hash::Writer> Hash<H> for F64 {
-    fn hash(&self, state: &mut H) {
+impl Hash for F64 {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         unsafe {
             transmute::<f64, u64>(self.0)
         }.hash(state)
