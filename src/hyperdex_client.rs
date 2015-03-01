@@ -12,6 +12,10 @@ pub struct Struct_hyperdex_client_attribute {
     pub datatype: Enum_hyperdatatype,
 }
 
+pub struct AttributePtr(pub *const Struct_hyperdex_client_attribute);
+unsafe impl Send for AttributePtr {}
+unsafe impl Sync for AttributePtr {}
+
 unsafe impl Send for Struct_hyperdex_client_attribute {}
 unsafe impl Sync for Struct_hyperdex_client_attribute {}
 

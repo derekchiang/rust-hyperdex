@@ -48,7 +48,7 @@ pub enum HyperValue {
 
 pub struct SearchState {
     pub status: Box<Enum_hyperdex_client_returncode>,
-    pub attrs: Unique<Struct_hyperdex_client_attribute>,
+    pub attrs: Box<AttributePtr>,
     pub attrs_sz: Box<size_t>,
     pub res_tx: Sender<Result<HyperObject, HyperError>>,
 }
