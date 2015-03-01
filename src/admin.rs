@@ -48,7 +48,7 @@ impl Admin {
                 // to do hyperdex_admin_loop()
                 let periodic = timer.periodic(Duration::milliseconds(100));
 
-                let loop_fn = |&: pending: &mut Vec<AdminRequest>| {
+                let loop_fn = |pending: &mut Vec<AdminRequest>| {
                     if pending.len() == 0 {
                         return;
                     }
