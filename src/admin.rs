@@ -1,5 +1,5 @@
 use std::mem::transmute;
-use std::old_io::timer::{sleep, Timer};
+use std::old_io::timer::Timer;
 use std::old_io::net::ip::SocketAddr;
 use std::time::duration::Duration;
 use std::sync::Future;
@@ -33,10 +33,11 @@ impl Admin {
         let ip_str = format!("{}", coordinator.ip).to_c_str();
 
         let ptr = hyperdex_admin_create(ip_str.as_ptr(), coordinator.port);
+        let (req_tx, req_rx) = channel();
         if ptr.is_null() {
-            Err(format!("Could not create hyperdex_admin ({})", coordinator))
+            return Err(format!("Could not create hyperdex_admin ({})", coordinator));
         } else {
-            let (req_tx, req_rx) = channel();
+            let ptr = Unique::new(ptr);
 
             Thread::spawn(move|| {
                 // A list of pending requests
@@ -53,7 +54,7 @@ impl Admin {
                     }
 
                     let mut status = 0;
-                    let ret = hyperdex_admin_loop(ptr, -1, &mut status);
+                    let ret = hyperdex_admin_loop(*ptr, -1, &mut status);
                     if ret < 0 {
                         if ret == -1 {
                             return;
@@ -79,12 +80,12 @@ impl Admin {
                             },
                             _ => {
                                 if req.failure.is_some() {
-                                    req.failure.unwrap().invoke(get_admin_error(ptr, *req.status));
+                                    req.failure.unwrap().invoke(get_admin_error(*ptr, *req.status));
                                 }
                             }
                         }
                     } else if req.failure.is_some() {
-                        req.failure.unwrap().invoke(get_admin_error(ptr, status));
+                        req.failure.unwrap().invoke(get_admin_error(*ptr, status));
                     }
                 };
 
@@ -99,7 +100,7 @@ impl Admin {
                                 },
                                 Err(_) => {
                                     // TODO: this is causing trouble for some reason
-                                    hyperdex_admin_destroy(ptr);
+                                    hyperdex_admin_destroy(*ptr);
                                     return;
                                 }
                             };
@@ -114,13 +115,12 @@ impl Admin {
                     )
                 }
             });
-
-            Ok(Admin {
-                ptr: ptr,
-                req_tx: req_tx,
-            })
         }
 
+        return Ok(Admin {
+            ptr: ptr,
+            req_tx: req_tx,
+        })
         }
     }
 

@@ -13,7 +13,6 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicInt;
 use std::sync::Future;
 use std::time::duration::Duration;
-use std::old_io::timer::sleep;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread::Thread;
@@ -826,17 +825,18 @@ macro_rules! NewHyperMapAttribute(
 
 pub struct InnerClient {
     ptr: Unique<Struct_hyperdex_client>,
-    ops: Arc<Mutex<HashMap<int64_t, HyperState>>>,
+    ops: Arc<HashMap<int64_t, HyperState>>,
     err_tx: Sender<HyperError>,
+    mutex: Arc<Mutex<()>>,
 }
 
 impl Clone for InnerClient {
     fn clone(&self) -> InnerClient {
-        println!("cloned ptr: {:p}", *self.ptr);
         return InnerClient {
             ptr: unsafe { Unique::new(*self.ptr) },
             ops: self.ops.clone(),
             err_tx: self.err_tx.clone(),
+            mutex: self.mutex.clone(),
         }
     }
 }
@@ -868,6 +868,7 @@ impl InnerClient {
 
                 let mut reqid = 0;
                 let mut loop_status = 0;
+                let _ = self.mutex.lock();
 
                 match req_buf.pop() {
                     Some((r, l)) => {
@@ -886,8 +887,8 @@ impl InnerClient {
                 } else if reqid < 0 {
                     self.err_tx.send(get_client_error(*self.ptr, loop_status));
                 } else {
-                    let mut ops = &mut*self.ops.lock().unwrap();
                     let mut remove_req = false;
+                    let ops = self.ops.clone();
                     match ops.get(&reqid) {
                         None => {
                             // This is a very rare race condition.  It happens when the request
@@ -949,27 +950,28 @@ macro_rules! make_fn_spacename_key_status_attributes(
             let space_str = space.to_c_str();
 
             let mut status = box 0u32;
-            let mut attrs = box null();
+            let mut attrs = null();
             let mut attrs_sz = box 0u64;
 
             let (err_tx, err_rx) = channel();
 
-            let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let _ = inner_client.mutex.lock();
+                let mut ops = inner_client.ops.clone(); 
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
                                                                key_str.as_ptr() as *const i8,
                                                                key_str.len() as u64,
                                                                &mut *status,
-                                                               &mut *attrs, &mut *attrs_sz);
+                                                               &mut attrs, &mut *attrs_sz);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(*inner_client.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
 
+            let attrs = Unique::new(attrs as *mut Struct_hyperdex_client_attribute);
             Future::from_fn(move|| {
                 let err = err_rx.recv().unwrap();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
@@ -1018,10 +1020,10 @@ macro_rules! make_fn_spacename_key_status(
             let mut status = box 0u32;
 
             let (err_tx, err_rx) = channel();
-
-            let mut ops_mutex = inner_client.ops.clone();
+ 
             {
-                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let _ = inner_client.mutex.lock();
+                let mut ops = inner_client.ops.clone();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
@@ -1068,7 +1070,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             let key_str = key.to_string();
 
             let mut status_ptr = box 0u32;
-            let mut attrs_ptr = box null();
+            let mut attrs_ptr = null();
             let mut attrs_sz_ptr = box 0u64;
 
             let arena = hyperdex_ds_arena_create();
@@ -1087,9 +1089,9 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             let (err_tx, err_rx) = channel();
             let space_str = space.to_c_str();
 
-            let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let _ = inner_client.mutex.lock();
+                let mut ops = inner_client.ops.clone();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
@@ -1098,7 +1100,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
                                                                &mut *status_ptr,
-                                                               &mut *attrs_ptr, &mut *attrs_sz_ptr);
+                                                               &mut attrs_ptr, &mut *attrs_sz_ptr);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(*inner_client.ptr, 0)));
                 }
@@ -1106,6 +1108,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
             }
             hyperdex_ds_arena_destroy(arena);
 
+            let attrs_ptr = Unique::new(attrs_ptr as *mut Struct_hyperdex_client_attribute);
             Future::from_fn(move|| {
                 let err = err_rx.recv().unwrap();
                 if err.status != HYPERDEX_CLIENT_SUCCESS {
@@ -1161,9 +1164,9 @@ macro_rules! make_fn_spacename_key_attributes_status(
 
             let (err_tx, err_rx) = channel();
 
-            let mut ops_mutex = inner_client.ops.clone();
             {
-                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let _ = inner_client.mutex.lock();
+                let mut ops = inner_client.ops.clone();
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
@@ -1219,9 +1222,9 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
 
                 let (err_tx, err_rx) = channel();
 
-                let mut ops_mutex = inner_client.ops.clone();
                 {
-                    let mut ops = &mut*ops_mutex.lock().unwrap();
+                    let _ = inner_client.mutex.lock();
+                    let mut ops = inner_client.ops.clone();
                     let req_id =
                         concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                 space_str.as_ptr() as *const i8,
@@ -1289,9 +1292,9 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                     let space_str = space.to_c_str();
                     let key_str = key.to_string();
 
-                    let mut ops_mutex = inner_client.ops.clone();
                     {
-                        let mut ops = &mut*ops_mutex.lock().unwrap();
+                        let _ = inner_client.mutex.lock();
+                        let mut ops = inner_client.ops.clone();
                         let req_id = 
                             concat_idents!(hyperdex_client_, $fn_name)(
                                 *inner_client.ptr,
@@ -1368,9 +1371,9 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
 
                 let (err_tx, err_rx) = channel();
 
-                let mut ops_mutex = inner_client.ops.clone();
                 {
-                    let mut ops = &mut*ops_mutex.lock().unwrap();
+                    let _ = inner_client.mutex.lock();
+                    let mut ops = inner_client.ops.clone();
                     let req_id =
                         concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                 space_str.as_ptr() as *const i8,
@@ -1428,12 +1431,12 @@ impl Client {
             if ptr.is_null() {
                 return Err(format!("Unable to create client.  errno is: {}", errno()));
             } else {
-                let ops = Arc::new(Mutex::new(HashMap::new()));
                 let (shutdown_tx, shutdown_rx) = channel();
                 let mut inner_client = InnerClient {
                     ptr: unsafe { Unique::new(ptr) },
-                    ops: ops.clone(),
+                    ops: Arc::new(HashMap::new()),
                     err_tx: err_tx.clone(),
+                    mutex: Arc::new(Mutex::new(())),
                 };
                 let mut ic_clone = inner_client.clone();
                 Thread::spawn(move|| {
@@ -1472,20 +1475,20 @@ impl Client {
             };
 
             let mut status_ptr = box 0u32;
-            let mut attrs_ptr = box null();
+            let mut attrs_ptr = null();
             let mut attrs_sz_ptr = box 0u64;
             let space_str = space.to_c_str();
 
-            let mut ops_mutex = inner_client.ops.clone();
+            let _ = inner_client.mutex.lock();
             {
-                let mut ops = &mut*ops_mutex.lock().unwrap();
+                let mut ops = inner_client.ops.clone();
                 let req_id =
                     hyperdex_client_search(*inner_client.ptr,
                                            space_str.as_ptr() as *const i8,
                                            c_checks.as_ptr(),
                                            c_checks.len() as u64,
                                            &mut *status_ptr,
-                                           &mut *attrs_ptr,
+                                           &mut attrs_ptr,
                                            &mut *attrs_sz_ptr);
                 if req_id < 0 {
                     res_tx.send(Err(get_client_error(*inner_client.ptr, 0)));
@@ -1494,7 +1497,7 @@ impl Client {
 
                 let mut state = SearchState {
                     status: status_ptr,
-                    attrs: attrs_ptr,
+                    attrs: Unique::new(attrs_ptr as *mut Struct_hyperdex_client_attribute),
                     attrs_sz: attrs_sz_ptr,
                     res_tx: res_tx,
                 };
