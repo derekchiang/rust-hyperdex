@@ -1432,7 +1432,6 @@ impl Client {
         let mut shutdown_txs = Vec::new();
         for _ in range(0, num_cpus()) {
             let ptr = unsafe { hyperdex_client_create(ip_str.as_ptr(), coordinator.port) };
-            println!("ptr: {:p}", ptr);
             if ptr.is_null() {
                 return Err(format!("Unable to create client.  errno is: {}", errno()));
             } else {
