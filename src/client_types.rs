@@ -419,9 +419,9 @@ impl PartialEq for F64 {
 impl PartialOrd for F64 {
     fn partial_cmp(&self, other: &F64) -> Option<Ordering> {
         // Kinda hacky, but I think this should work...
-        if self > other {
+        if self.0 > other.0 {
             Some(Ordering::Greater)
-        } else if self < other {
+        } else if self.0 < other.0 {
             Some(Ordering::Less)
         } else {
             Some(Ordering::Equal)
