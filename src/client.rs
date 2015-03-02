@@ -940,13 +940,14 @@ macro_rules! make_fn_spacename_key_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
         pub fn $async_name<S, K>(&mut self, space: S, key: K)
-            -> Future<Result<HyperObject, HyperError>> where S: ToCStr, K: ToString {
+            -> Future<Result<HyperObject, HyperError>> where S: ToCStr, K: ToHyperValue {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
-            let key_str = key.to_string();
+            let arena = hyperdex_ds_arena_create();
+            let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
             let space_str = space.to_c_str();
 
             let mut status = box 0u32;
@@ -962,8 +963,8 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
-                                                               key_str.as_ptr() as *const i8,
-                                                               key_str.len() as u64,
+                                                               key_str,
+                                                               key_sz,
                                                                &mut *status,
                                                                &mut (*attrs).0, &mut *attrs_sz);
                 if req_id < 0 {
@@ -971,6 +972,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
+            hyperdex_ds_arena_destroy(arena);
 
             Future::from_fn(move|| {
                 let err = err_rx.recv().unwrap();
@@ -999,7 +1001,7 @@ macro_rules! make_fn_spacename_key_status_attributes(
         }
 
         pub fn $fn_name<S, K>(&mut self, space: S, key: K)
-            -> Result<HyperObject, HyperError> where S: ToCStr, K: ToString {
+            -> Result<HyperObject, HyperError> where S: ToCStr, K: ToHyperValue {
             self.$async_name(space, key).into_inner()
         }
         }
@@ -1010,12 +1012,13 @@ macro_rules! make_fn_spacename_key_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
         pub fn $async_name<S, K>(&mut self, space: S, key: K)
-            -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString {
+            -> Future<Result<(), HyperError>> where S: ToCStr, K: ToHyperValue {
             unsafe {
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
-            let key_str = key.to_string();
+            let arena = hyperdex_ds_arena_create();
+            let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
             let space_str = space.to_c_str();
             let mut status = box 0u32;
 
@@ -1028,14 +1031,14 @@ macro_rules! make_fn_spacename_key_status(
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
-                                                               key_str.as_ptr() as *const i8,
-                                                               key_str.len() as u64,
+                                                               key_str, key_sz,
                                                                &mut *status);
                 if req_id < 0 {
                     return Future::from_value(Err(get_client_error(*inner_client.ptr, 0)));
                 }
                 ops.insert(req_id, HyperStateOp(err_tx));
             }
+            hyperdex_ds_arena_destroy(arena);
 
             Future::from_fn(move|| {
                 let err = err_rx.recv().unwrap();
@@ -1051,7 +1054,7 @@ macro_rules! make_fn_spacename_key_status(
         }
 
         pub fn $fn_name<S, K>(&mut self, space: S, key: K)
-            -> Result<(), HyperError> where S: ToCStr, K: ToString {
+            -> Result<(), HyperError> where S: ToCStr, K: ToHyperValue {
             self.$async_name(space, key).into_inner()
         }
         }
@@ -1062,19 +1065,19 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
         pub fn $async_name<S, K, A>(&mut self, space: S, key: K, attrs: Vec<A>)
-            -> Future<Result<HyperObject, HyperError>> where S: ToCStr, K: ToString, A: ToString {
+            -> Future<Result<HyperObject, HyperError>> where S: ToCStr, K: ToHyperValue, A: ToString {
             unsafe {
             // TODO: Is "Relaxed" good enough?
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
-            let key_str = key.to_string();
+            let arena = hyperdex_ds_arena_create();
+            let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
 
             let mut status_ptr = box 0u32;
             let mut attrs_ptr = box AttributePtr(null());
             let mut attrs_sz_ptr = box 0u64;
 
-            let arena = hyperdex_ds_arena_create();
             let mut c_attrs = match convert_attributenames(arena,
                                                            attrs.into_iter().map(|attr| {
                                                                attr.to_string()
@@ -1097,8 +1100,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
-                                                               key_str.as_ptr() as *const i8,
-                                                               key_str.len() as u64,
+                                                               key_str, key_sz,
                                                                c_attrs.as_mut_ptr(),
                                                                c_attrs.len() as u64,
                                                                &mut *status_ptr,
@@ -1137,7 +1139,7 @@ macro_rules! make_fn_spacename_key_attributenames_status_attributes(
         }
 
         pub fn $fn_name<S, K, A>(&mut self, space: S, key: K, attrs: Vec<A>)
-            -> Result<HyperObject, HyperError> where S: ToCStr, K: ToString, A: ToString {
+            -> Result<HyperObject, HyperError> where S: ToCStr, K: ToHyperValue, A: ToString {
             self.$async_name(space, key, attrs).into_inner()
         }
         }
@@ -1148,16 +1150,17 @@ macro_rules! make_fn_spacename_key_attributes_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
         pub fn $async_name<S, K>(&mut self, space: S, key: K, value: HyperObject)
-            -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+            -> Future<Result<(), HyperError>> where S: ToCStr, K: ToHyperValue { unsafe {
             let inner_client =
                 self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
+            let arena = hyperdex_ds_arena_create();
+
             let space_str = space.to_c_str();
-            let key_str = key.to_string();
+            let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
 
             let mut status_ptr = box 0u32;
 
-            let arena = hyperdex_ds_arena_create();
             let obj = match convert_hyperobject(arena, value) {
                 Ok(x) => x,
                 Err(err) => panic!(err),
@@ -1172,8 +1175,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
                 let req_id =
                     concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                                space_str.as_ptr() as *const i8,
-                                                               key_str.as_ptr() as *const i8,
-                                                               key_str.len() as u64,
+                                                               key_str, key_sz,
                                                                obj.as_ptr(), obj.len() as u64,
                                                                &mut *status_ptr);
                 if req_id < 0 {
@@ -1196,7 +1198,7 @@ macro_rules! make_fn_spacename_key_attributes_status(
         }}
 
         pub fn $fn_name<S, K>(&mut self, space: S, key: K, value: HyperObject)
-            -> Result<(), HyperError> where S: ToCStr, K: ToString {
+            -> Result<(), HyperError> where S: ToCStr, K: ToHyperValue {
             self.$async_name(space, key, value).into_inner()
         }
         }
@@ -1207,16 +1209,16 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
             pub fn $async_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
-                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToHyperValue { unsafe {
                 let inner_client =
                     self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
-                let key_str = key.to_string();
+                let arena = hyperdex_ds_arena_create();
+                let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
                 let space_str = space.to_c_str();
 
                 let mut status_ptr = box 0u32;
 
-                let arena = hyperdex_ds_arena_create();
                 let c_mapattrs = match convert_map_attributes(arena, mapattrs) {
                     Ok(x) => x,
                     Err(err) => panic!(err),
@@ -1231,8 +1233,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
                     let req_id =
                         concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                 space_str.as_ptr() as *const i8,
-                                                key_str.as_ptr() as *const i8,
-                                                key_str.len() as u64,
+                                                key_str, key_sz,
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                                 &mut *status_ptr);
                     if req_id < 0 {
@@ -1255,7 +1256,7 @@ macro_rules! make_fn_spacename_key_mapattributes_status(
             }
 
             pub fn $fn_name<S, K>(&mut self, space: S, key: K, mapattrs: Vec<HyperMapAttribute>)
-                -> Result<(), HyperError> where S: ToCStr, K: ToString {
+                -> Result<(), HyperError> where S: ToCStr, K: ToHyperValue {
                 self.$async_name(space, key, mapattrs).into_inner()
             }
         }
@@ -1266,7 +1267,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
     ($fn_name: ident, $async_name: ident) => (
         impl Client {
             pub fn $async_name<S, K>(&mut self, space: S, key: K, checks: Vec<HyperPredicate>, value: HyperObject)
-                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToHyperValue { unsafe {
                     let inner_client =
                         self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
@@ -1293,7 +1294,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                     let mut status_ptr = box 0u32;
 
                     let space_str = space.to_c_str();
-                    let key_str = key.to_string();
+                    let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
 
                     {
                         let _lockhandle = inner_client.mutex.lock();
@@ -1303,8 +1304,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                             concat_idents!(hyperdex_client_, $fn_name)(
                                 *inner_client.ptr,
                                 space_str.as_ptr() as *const i8,
-                                key_str.as_ptr() as *const i8,
-                                key_str.len() as u64,
+                                key_str, key_sz,
                                 c_checks.as_ptr(),
                                 c_checks.len() as u64,
                                 obj.as_ptr(),
@@ -1330,7 +1330,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
             }
 
             pub fn $fn_name<S, K>(&mut self, space: S, key: K, checks: Vec<HyperPredicate>, value: HyperObject)
-                -> Result<(), HyperError> where S: ToCStr, K: ToString {
+                -> Result<(), HyperError> where S: ToCStr, K: ToHyperValue {
                 self.$async_name(space, key, checks, value).into_inner()
             }
         }
@@ -1342,16 +1342,16 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
         impl Client {
             pub fn $async_name<S, K>(&mut self, space: S, key: K,
                                      checks: Vec<HyperPredicate>, mapattrs: Vec<HyperMapAttribute>)
-                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToString { unsafe {
+                -> Future<Result<(), HyperError>> where S: ToCStr, K: ToHyperValue { unsafe {
                 let inner_client =
                     self.inner_clients[self.counter.fetch_add(1, Ordering::Relaxed) as usize % self.inner_clients.len()].clone();
 
-                let key_str = key.to_string();
+                let arena = hyperdex_ds_arena_create();
+                let (key_str, key_sz, _) = convert_type(arena, key.to_hyper()).unwrap();
                 let space_str = space.to_c_str();
 
                 let mut status_ptr = box 0u32;
 
-                let arena = hyperdex_ds_arena_create();
                 let c_checks = match convert_predicates(arena, checks) {
                     Ok(x) => x,
                     Err(err) => {
@@ -1382,8 +1382,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
                     let req_id =
                         concat_idents!(hyperdex_client_, $fn_name)(*inner_client.ptr,
                                                 space_str.as_ptr() as *const i8,
-                                                key_str.as_ptr() as *const i8,
-                                                key_str.len() as u64,
+                                                key_str, key_sz,
                                                 c_checks.as_ptr(), c_checks.len() as u64,
                                                 c_mapattrs.as_ptr(), c_mapattrs.len() as u64,
                                                 &mut *status_ptr);
@@ -1408,7 +1407,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
 
             pub fn $fn_name<S, K>(&mut self, space: S, key: K,
                                   checks: Vec<HyperPredicate>, mapattrs: Vec<HyperMapAttribute>)
-                -> Result<(), HyperError> where S: ToCStr, K: ToString {
+                -> Result<(), HyperError> where S: ToCStr, K: ToHyperValue {
                 self.$async_name(space, key, checks, mapattrs).into_inner()
             }
         }
