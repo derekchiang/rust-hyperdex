@@ -388,7 +388,7 @@ pub struct F64(pub f64);
 
 impl PartialEq for F64 {
     fn eq(&self, other: &F64) -> bool {
-        if self == other {
+        if self.0 == other.0 {
             true
         } else {
             false
