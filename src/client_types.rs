@@ -327,27 +327,43 @@ impl ToHyperValue for BTreeSet<F64> {
     }
 }
 
-impl ToHyperValue for HashMap<Vec<u8>, Vec<u8>> {
+impl<K: ToByteVec + Hash + Eq, V: ToByteVec> ToHyperValue for HashMap<K, V> {
     fn to_hyper(self) -> HyperValue {
-        HyperMapStringString(self)
+        let mut m = HashMap::new();
+        for (k, v) in self.into_iter() {
+            m.insert(k.to_bytes(), v.to_bytes());
+        }
+        HyperMapStringString(m)
     }
 }
 
-impl ToHyperValue for HashMap<Vec<u8>, i64> {
+impl<K: ToByteVec + Hash + Eq> ToHyperValue for HashMap<K, i64> {
     fn to_hyper(self) -> HyperValue {
-        HyperMapStringInt(self)
+        let mut m = HashMap::new();
+        for (k, v) in self.into_iter() {
+            m.insert(k.to_bytes(), v);
+        }
+        HyperMapStringInt(m)
     }
 }
 
-impl ToHyperValue for HashMap<Vec<u8>, f64> {
+impl<K: ToByteVec + Hash + Eq> ToHyperValue for HashMap<K, f64> {
     fn to_hyper(self) -> HyperValue {
-        HyperMapStringFloat(self)
+        let mut m = HashMap::new();
+        for (k, v) in self.into_iter() {
+            m.insert(k.to_bytes(), v);
+        }
+        HyperMapStringFloat(m)
     }
 }
 
-impl ToHyperValue for HashMap<i64, Vec<u8>> {
+impl<V: ToByteVec> ToHyperValue for HashMap<i64, V> {
     fn to_hyper(self) -> HyperValue {
-        HyperMapIntString(self)
+        let mut m = HashMap::new();
+        for (k, v) in self.into_iter() {
+            m.insert(k, v.to_bytes());
+        }
+        HyperMapIntString(m)
     }
 }
 
@@ -363,9 +379,13 @@ impl ToHyperValue for HashMap<i64, f64> {
     }
 }
 
-impl ToHyperValue for HashMap<F64, Vec<u8>> {
+impl<V: ToByteVec> ToHyperValue for HashMap<F64, V> {
     fn to_hyper(self) -> HyperValue {
-        HyperMapFloatString(self)
+        let mut m = HashMap::new();
+        for (k, v) in self.into_iter() {
+            m.insert(k, v.to_bytes());
+        }
+        HyperMapFloatString(m)
     }
 }
 
