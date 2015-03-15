@@ -5,8 +5,8 @@
 extern crate libc;
 
 pub use common::HyperError;
-pub use client::*;
-pub use client_types::*;
+pub use client::{Client};
+pub use client_types::{F64, HyperMapAttribute, HyperObject, HyperPredicate, HyperObjectKeyError, HyperPredicateType, HyperValue};
 pub use admin::Admin;
 
 mod client;

@@ -19,6 +19,7 @@ use self::HyperValue::*;
 use self::HyperState::*;
 use self::HyperObjectKeyError::*;
 
+/// Types of values that HyperDex accepts.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HyperValue {
     HyperString(Vec<u8>),
@@ -63,6 +64,7 @@ pub struct Request {
     confirm_tx: Sender<bool>,
 }
 
+/// Predicates that HyperDex supports.
 pub enum HyperPredicateType {
     FAIL = HYPERPREDICATE_FAIL as isize,
     EQUALS = HYPERPREDICATE_EQUALS as isize,
@@ -77,6 +79,14 @@ pub enum HyperPredicateType {
     CONTAINS = HYPERPREDICATE_CONTAINS as isize,
 }
 
+/// A predicate used for search.
+///
+/// # Examples
+/// 
+/// ```
+/// let predicates = vec!(HyperPredicate::new("age", LESS_EQUAL, 25));
+/// let res = client.search(space_name, predicates);
+/// ```
 pub struct HyperPredicate {
     pub attr: String,
     pub value: HyperValue,
@@ -94,15 +104,20 @@ impl HyperPredicate {
     }
 }
 
+/// A key-value pair associated with a specific map attribute
 pub struct HyperMapAttribute {
     pub attr: String,
     pub key: HyperValue,
     pub value: HyperValue,
 }
 
+/// The errors that can occur upon a lookup from a HyperObject.
 #[derive(Debug)]
 pub enum HyperObjectKeyError {
+    /// The key does not exist.
     KeyDoesNotExist,
+
+    /// The key does exist, but the value is not the type that you think it is.
     ObjectIsAnotherType,
 }
 
@@ -160,6 +175,29 @@ from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
 from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
 from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
 
+/// A HyperDex object.
+///
+/// # Examples
+///
+/// ```
+/// let mut obj = HyperObject::new();
+/// obj.insert("first", "Emin");
+/// obj.insert("last", "Sirer");
+/// obj.insert("age", 30);
+/// ```
+/// 
+/// Or, using the macro:
+/// 
+/// ```
+/// match client.put(space_name, "robert", NewHyperObject!(
+///     "first", "Robert",
+///     "last", "Escriva",
+///     "age", 25,
+/// )) {
+///     Ok(()) => (),
+///     Err(err) => panic!(err),
+/// }
+/// ```
 #[derive(Debug, PartialEq)]
 pub struct HyperObject {
     pub map: HashMap<String, HyperValue>,
@@ -191,8 +229,6 @@ impl HyperObject {
         }
     }
 }
-
-pub type HyperMap = HashMap<HyperValue, HyperValue>;
 
 pub trait ToByteVec {
     fn to_bytes(&self) -> Vec<u8>;
@@ -401,8 +437,10 @@ impl ToHyperValue for HashMap<F64, f64> {
     }
 }
 
-/// Unfortunately floats do not implement Ord nor Eq, so we have to do it for them
-/// by wrapping them in a struct and implement those traits
+/// A wrapper around f64.
+/// 
+/// Unfortunately f64 does not implement Ord nor Eq, so we have to do it manually
+/// by wrapping f64 in a struct and implement those traits
 #[derive(Debug, Clone)]
 pub struct F64(pub f64);
 

@@ -800,6 +800,19 @@ unsafe fn convert_hyperobject(arena: *mut Struct_hyperdex_ds_arena, obj: HyperOb
 }
 
 #[macro_export]
+/** Creates a HyperDex object.
+
+# Examples
+
+```
+let obj = NewHyperObject!(
+    "first", "Derek",
+    "last", "Chiang",
+    "age", 20,
+);
+client.put(space, key, obj);
+```
+**/
 macro_rules! NewHyperObject(
     ($($key: expr, $value: expr,)*) => (
         {
@@ -812,6 +825,7 @@ macro_rules! NewHyperObject(
     );
 );
 
+/// Specifies a key-value pair for a particular map attribute.
 #[macro_export]
 macro_rules! NewHyperMapAttribute(
     ($attr: expr, $key: expr, $value: expr) => (
@@ -928,11 +942,11 @@ impl InnerClient {
                         },
                     }
                     if remove_req {
-                        ops.remove(&reqid);   
+                        ops.remove(&reqid);
                     }
                 }
             }
-        }        
+        }
     }
 }
 
@@ -1023,7 +1037,7 @@ macro_rules! make_fn_spacename_key_status(
             let mut status = box 0u32;
 
             let (err_tx, err_rx) = channel();
- 
+
             {
                 let _lockhandle = inner_client.mutex.lock();
                 let mut ops_mutex = inner_client.ops.clone();
@@ -1300,7 +1314,7 @@ macro_rules! make_fn_spacename_key_predicates_attributes_status(
                         let _lockhandle = inner_client.mutex.lock();
                         let mut ops_mutex = inner_client.ops.clone();
                         let mut ops = &mut*ops_mutex.lock().unwrap();
-                        let req_id = 
+                        let req_id =
                             concat_idents!(hyperdex_client_, $fn_name)(
                                 *inner_client.ptr,
                                 space_str.as_ptr() as *const i8,
@@ -1414,6 +1428,10 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
     )
 );
 
+/// A HyperDex client, used for common operations like getting and putting objects.
+///
+/// The functions implemented by this client correspond 1-to-1 to those in the C API.
+/// Please refer to [HyperDex's official documentation](http://hyperdex.org/doc/latest/CClientAPI/#chap:api:c-client) for details:
 pub struct Client {
     counter: AtomicInt,
     shutdown_txs: Vec<Sender<()>>,
@@ -1422,6 +1440,7 @@ pub struct Client {
 
 impl Client {
 
+    /// Creates a new client.
     pub fn new(coordinator: SocketAddr) -> Result<Client, String> {
         let ip_str = format!("{}", coordinator.ip).to_c_str();
 

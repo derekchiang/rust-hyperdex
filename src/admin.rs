@@ -14,6 +14,7 @@ use common::*;
 use hyperdex::*;
 use hyperdex_admin::*;
 
+/// A HyperDex Admin object, used for meta operations like creating and removing spaces.
 pub struct Admin {
     ptr: *mut Struct_hyperdex_admin,
     req_tx: Sender<AdminRequest>,
