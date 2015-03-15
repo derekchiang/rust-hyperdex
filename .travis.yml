@@ -1,15 +1,25 @@
 language: rust
-
 before_install:
-    - wget -O - http://ubuntu.hyperdex.org/hyperdex.gpg.key | sudo apt-key add -
-    - sudo wget -O /etc/apt/sources.list.d/hyperdex.list http://ubuntu.hyperdex.org/precise.list
-    - sudo apt-get -y update
-    - sudo apt-get -y install hyperdex libhyperdex-dev libhyperdex-client-dev libhyperdex-admin-dev
-    - sudo ldconfig
-
+- wget -O - http://ubuntu.hyperdex.org/hyperdex.gpg.key | sudo apt-key add -
+- sudo wget -O /etc/apt/sources.list.d/hyperdex.list http://ubuntu.hyperdex.org/precise.list
+- sudo apt-get -y update
+- sudo apt-get -y install hyperdex libhyperdex-dev libhyperdex-client-dev libhyperdex-admin-dev
+- sudo ldconfig
 script:
-    - cargo build --verbose
-    - export RUST_TEST_TASKS=1
-    - mkdir coord && cd coord && hyperdex coordinator -f -l 127.0.0.1 -p 1982 & 
-    - mkdir data && cd data && hyperdex daemon -f --listen=127.0.0.1 --listen-port=2012 --coordinator=127.0.0.1 --coordinator-port=1982 --data=. &
-    - cargo test
+- cargo build --verbose
+- export RUST_TEST_TASKS=1
+- mkdir coord && cd coord && hyperdex coordinator -f -l 127.0.0.1 -p 1982 &
+- mkdir data && cd data && hyperdex daemon -f --listen=127.0.0.1 --listen-port=2012
+  --coordinator=127.0.0.1 --coordinator-port=1982 --data=. &
+- cargo test
+after_success: |
+  [ $TRAVIS_BRANCH = master ] &&
+  [ $TRAVIS_PULL_REQUEST = false ] &&
+  cargo doc &&
+  echo "<meta http-equiv=refresh content=0;url=`echo hyperdex | cut -d '/' -f 2`/index.html>" > target/doc/index.html &&
+  sudo pip install ghp-import &&
+  ghp-import -n target/doc &&
+  git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
+env:
+  global:
+    secure: TKaEe5J862TLvz/1iMWAu/8wn7EYxTsnEP/XfOjff4Fxvr90FxHx17Dimu7pB8gBH+ouCJNL4NTrJfaVPu549QCN3cY5NQuSJaA+rOjZcJewWqq5m+sNlxEdn6C5a2P2UXQDq8fqmWWBHCeyrmHCN6OzKFEU/6h+lXlo0K6euuA=
