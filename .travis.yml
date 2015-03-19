@@ -3,7 +3,7 @@ before_install:
 - wget -O - http://ubuntu.hyperdex.org/hyperdex.gpg.key | sudo apt-key add -
 - sudo sh -c "echo 'deb [arch=amd64] http://ubuntu.hyperdex.org precise main' > /etc/apt/sources.list.d/hyperdex.list"
 - sudo apt-get -y update
-- sudo apt-get -y install hyperdex libhyperdex-dev libhyperdex-client-dev libhyperdex-admin-dev python-hyperdex-client libhyperdex-dev-warp
+- sudo apt-get -y install libhyperdex-client-dev libhyperdex-admin-dev
 - sudo ldconfig
 script:
 - cargo build --verbose
