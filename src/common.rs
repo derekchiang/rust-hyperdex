@@ -45,8 +45,7 @@ pub unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8>
 
 pub unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
     let cstr = CStr::from_ptr(ptr);
-    let bytes = cstr.to_bytes();
-    String::from_utf8(bytes).unwrap()
+    String::from_utf8(cstr.to_bytes().to_vec()).unwrap()
 }
 
 pub trait ToCStr {
@@ -55,12 +54,18 @@ pub trait ToCStr {
 
 impl ToCStr for Vec<u8> {
     fn to_c_str(self) -> CString {
-        CString::from_vec(self)
+        CString::from_vec_unchecked(self)
     }
 }
 
-impl<T: ToString> ToCStr for T {
+impl ToCStr for String {
     fn to_c_str(self) -> CString {
-        CString::from_vec(self.to_string().into_bytes())
+        CString::new(self).unwrap()
     }
 }
+
+// impl<T: ToString> ToCStr for T {
+    // fn to_c_str(self) -> CString {
+        // CString::from_vec(self.to_string().into_bytes())
+    // }
+// }
