@@ -1,4 +1,4 @@
-use std::ffi::{CString, c_str_to_bytes};
+use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter, Error};
 
 use hyperdex_admin::*;
@@ -44,18 +44,13 @@ pub unsafe fn to_bytes_with_len(ptr: *const ::libc::c_char, len: u64) -> Vec<u8>
 }
 
 pub unsafe fn to_string(ptr: *const ::libc::c_char) -> String {
-    let bytes = c_str_to_bytes(&ptr).to_vec();
+    let cstr = CStr::from_ptr(ptr);
+    let bytes = cstr.to_bytes();
     String::from_utf8(bytes).unwrap()
 }
 
 pub trait ToCStr {
     fn to_c_str(self) -> CString;
-}
-
-impl<T: ToString> ToCStr for T {
-    fn to_c_str(self) -> CString {
-        CString::from_vec(self.to_string().into_bytes())
-    }
 }
 
 impl ToCStr for Vec<u8> {
@@ -64,3 +59,8 @@ impl ToCStr for Vec<u8> {
     }
 }
 
+impl<T: ToString> ToCStr for T {
+    fn to_c_str(self) -> CString {
+        CString::from_vec(self.to_string().into_bytes())
+    }
+}

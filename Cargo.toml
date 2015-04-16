@@ -26,3 +26,7 @@ keywords = ["database", "bindings", "binding", "NoSQL", "HyperDex"]
 # license identifiers from http://spdx.org/licenses/. Multiple licenses can
 # be separated with a `/`
 license = "BSD-2-Clause"
+
+[dependencies]
+num_cpus = "*"
+errno = "*"

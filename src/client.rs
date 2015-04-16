@@ -1,7 +1,9 @@
 #![macro_use]
 
+extern crate errno;
+extern crate num_cpus;
+
 use std::old_io::net::ip::SocketAddr;
-use std::os::{num_cpus, errno};
 use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, BTreeSet};
 use std::ffi::CString;
@@ -10,7 +12,7 @@ use std::mem::transmute;
 use std::hash::Hash;
 use std::sync::atomic;
 use std::sync::atomic::Ordering;
-use std::sync::atomic::AtomicInt;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Future;
 use std::time::duration::Duration;
 use std::sync::{Arc, Mutex};
@@ -30,7 +32,7 @@ use client_types::HyperState::*;
 unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_attrs_sz: size_t) -> Result<HyperObject, String> {
     let mut attrs = HyperObject::new();
 
-    for i in range(0, c_attrs_sz) {
+    for i in 0..c_attrs_sz {
         let ref attr = *c_attrs.offset(i as isize);
         let name = to_string(attr.attr);
         match attr.datatype {
@@ -1433,7 +1435,7 @@ macro_rules! make_fn_spacename_key_predicates_mapattributes_status(
 /// The functions implemented by this client correspond 1-to-1 to those in the C API.
 /// Please refer to [HyperDex's official documentation](http://hyperdex.org/doc/latest/CClientAPI/#chap:api:c-client) for details:
 pub struct Client {
-    counter: AtomicInt,
+    counter: AtomicUsize,
     shutdown_txs: Vec<Sender<()>>,
     inner_clients: Vec<InnerClient>,
 }
@@ -1448,10 +1450,10 @@ impl Client {
 
         let mut inner_clients = Vec::new();
         let mut shutdown_txs = Vec::new();
-        for _ in range(0, num_cpus()) {
+        for _ in 0..num_cpus::get() {
             let ptr = unsafe { hyperdex_client_create(ip_str.as_ptr(), coordinator.port) };
             if ptr.is_null() {
-                return Err(format!("Unable to create client.  errno is: {}", errno()));
+                return Err(format!("Unable to create client.  errno is: {}", errno::errno()));
             } else {
                 let ops = Arc::new(Mutex::new(HashMap::new()));
                 let (shutdown_tx, shutdown_rx) = channel();
@@ -1471,7 +1473,7 @@ impl Client {
         };
 
         Ok(Client {
-            counter: AtomicInt::new(0),
+            counter: AtomicUsize::new(0),
             inner_clients: inner_clients,
             shutdown_txs: shutdown_txs,
         })
