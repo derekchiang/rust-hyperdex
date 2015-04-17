@@ -1,6 +1,12 @@
 #![feature(concat_idents)]
 #![feature(slicing_syntax)]
 #![feature(box_syntax)]
+#![feature(libc)]
+#![feature(unique)]
+#![feature(std_misc)]
+#![feature(collections)]
+#![feature(ip_addr)]
+#![feature(convert)]
 
 extern crate libc;
 

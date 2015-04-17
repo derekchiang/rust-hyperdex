@@ -3,7 +3,7 @@
 extern crate errno;
 extern crate num_cpus;
 
-use std::old_io::net::ip::SocketAddr;
+use std::net::SocketAddr;
 use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, BTreeSet};
 use std::ffi::CString;
@@ -1444,14 +1444,14 @@ impl Client {
 
     /// Creates a new client.
     pub fn new(coordinator: SocketAddr) -> Result<Client, String> {
-        let ip_str = format!("{}", coordinator.ip).to_c_str();
+        let ip_str = format!("{}", coordinator.ip()).to_c_str();
 
         let (err_tx, err_rx) = channel();
 
         let mut inner_clients = Vec::new();
         let mut shutdown_txs = Vec::new();
         for _ in 0..num_cpus::get() {
-            let ptr = unsafe { hyperdex_client_create(ip_str.as_ptr(), coordinator.port) };
+            let ptr = unsafe { hyperdex_client_create(ip_str.as_ptr(), coordinator.port()) };
             if ptr.is_null() {
                 return Err(format!("Unable to create client.  errno is: {}", errno::errno()));
             } else {

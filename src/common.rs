@@ -15,7 +15,7 @@ pub struct HyperError {
 impl Display for HyperError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         Display::fmt(format!("HyperDex error:\n\tstatus: {}\n\tmessage: {}\n\tlocation: {}\n",
-                             self.status, self.message, self.location).as_slice(), f)
+                             self.status, self.message, self.location).as_str(), f)
     }
 }
 

@@ -1,6 +1,5 @@
 use std::mem::transmute;
-use std::old_io::timer::Timer;
-use std::old_io::net::ip::SocketAddr;
+use std::net::SocketAddr;
 use std::time::duration::Duration;
 use std::sync::Future;
 use std::thunk::Thunk;
@@ -31,9 +30,9 @@ impl Admin {
     pub fn new(coordinator: SocketAddr) -> Result<Admin, String> {
         unsafe {
 
-        let ip_str = format!("{}", coordinator.ip).to_c_str();
+        let ip_str = format!("{}", coordinator.ip()).to_c_str();
 
-        let ptr = hyperdex_admin_create(ip_str.as_ptr(), coordinator.port);
+        let ptr = hyperdex_admin_create(ip_str.as_ptr(), coordinator.port());
         let (req_tx, req_rx) = channel();
         if ptr.is_null() {
             return Err(format!("Could not create hyperdex_admin ({})", coordinator));
@@ -43,12 +42,6 @@ impl Admin {
             thread::spawn(move|| {
                 // A list of pending requests
                 let mut pending: Vec<AdminRequest> = Vec::new();
-                let mut timer = Timer::new().unwrap();
-
-                // We don't want to busy-spin, so we wake up the thread every once in a while
-                // to do hyperdex_admin_loop()
-                let periodic = timer.periodic(Duration::milliseconds(100));
-
                 let loop_fn = |pending: &mut Vec<AdminRequest>| {
                     if pending.len() == 0 {
                         return;
@@ -95,6 +88,14 @@ impl Admin {
                     }
                 };
 
+                let (periodic_tx, periodic_rx) = channel();
+                thread::spawn(move || {
+                    loop {
+                        thread::sleep_ms(100);
+                        periodic_tx.send(());
+                    }
+                });
+
                 loop {
                     select!(
                         // Add a new request
@@ -112,11 +113,8 @@ impl Admin {
                             };
                         },
                         // Wake up and call loop()
-                        option = periodic.recv() => {
-                            match option {
-                                Ok(()) => loop_fn(&mut pending),
-                                Err(_) => (),
-                            }
+                        _ = periodic_rx.recv() => {
+                            loop_fn(&mut pending);
                         }
                     )
                 }
