@@ -5,7 +5,7 @@ use std::time::duration::Duration;
 use std::sync::Future;
 use std::thunk::Thunk;
 use std::sync::mpsc::{channel, Sender, Receiver};
-use std::thread::Thread;
+use std::thread;
 use std::ptr::{Unique, null, null_mut};
 
 use libc::*;
@@ -23,8 +23,8 @@ pub struct Admin {
 pub struct AdminRequest {
     id: int64_t,
     status: Box<u32>,
-    success: Option<Thunk<'static>>,
-    failure: Option<Thunk<'static, HyperError, ()>>,
+    success: Option<Box<Fn() + Send>>,
+    failure: Option<Box<Fn(HyperError) + Send>>,
 }
 
 impl Admin {
@@ -40,7 +40,7 @@ impl Admin {
         } else {
             let ptr = Unique::new(ptr);
 
-            Thread::spawn(move|| {
+            thread::spawn(move|| {
                 // A list of pending requests
                 let mut pending: Vec<AdminRequest> = Vec::new();
                 let mut timer = Timer::new().unwrap();
@@ -75,18 +75,23 @@ impl Admin {
                     if status == HYPERDEX_ADMIN_SUCCESS {
                         match *req.status {
                             HYPERDEX_ADMIN_SUCCESS => {
-                                if req.success.is_some() {
-                                    req.success.unwrap().invoke(());
+                                match req.success {
+                                    Some(func) => func(),
+                                    None => (),
                                 }
                             },
                             _ => {
-                                if req.failure.is_some() {
-                                    req.failure.unwrap().invoke(get_admin_error(*ptr, *req.status));
+                                match req.failure {
+                                    Some(func) => func(get_admin_error(*ptr, *req.status)),
+                                    None => (),
                                 }
                             }
                         }
-                    } else if req.failure.is_some() {
-                        req.failure.unwrap().invoke(get_admin_error(*ptr, status));
+                    } else {
+                        match req.failure {
+                            Some(func) => func(get_admin_error(*ptr, status)),
+                            None => (),
+                        }
                     }
                 };
 
@@ -169,10 +174,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -226,11 +231,11 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: status,
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     let res = to_string(*res);
                     res_tx.send(Ok(res));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -257,10 +262,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -285,10 +290,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -315,10 +320,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -363,10 +368,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -396,10 +401,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };
@@ -423,10 +428,10 @@ impl Admin {
             let req = AdminRequest {
                 id: req_id,
                 status: transmute(status_ptr),
-                success: Some(Thunk::new(move|| {
+                success: Some(Box::new(move|| {
                     res_tx.send(Ok(()));
                 })),
-                failure: Some(Thunk::with_arg(move|err| {
+                failure: Some(Box::new(move|err| {
                     res_tx2.send(Err(err));
                 })),
             };

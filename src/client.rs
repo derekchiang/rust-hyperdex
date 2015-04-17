@@ -17,7 +17,7 @@ use std::sync::Future;
 use std::time::duration::Duration;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
-use std::thread::Thread;
+use std::thread;
 
 use libc::*;
 
@@ -1464,7 +1464,7 @@ impl Client {
                     mutex: Arc::new(Mutex::new(())),
                 };
                 let mut ic_clone = inner_client.clone();
-                Thread::spawn(move|| {
+                thread::spawn(move|| {
                     ic_clone.run_forever(shutdown_rx);
                 });
                 inner_clients.push(inner_client);

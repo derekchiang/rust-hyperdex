@@ -54,13 +54,21 @@ pub trait ToCStr {
 
 impl ToCStr for Vec<u8> {
     fn to_c_str(self) -> CString {
-        CString::from_vec_unchecked(self)
+        unsafe {
+            CString::from_vec_unchecked(self)
+        }
     }
 }
 
 impl ToCStr for String {
     fn to_c_str(self) -> CString {
         CString::new(self).unwrap()
+    }
+}
+
+impl<'a> ToCStr for &'a str {
+    fn to_c_str(self) -> CString {
+        self.to_string().to_c_str()
     }
 }
 
