@@ -15,6 +15,10 @@ Using [Cargo](https://crates.io/), the Rust package manager, it's as easy as add
     [dependencies]
     hyperdex = "*"
 
+## Documentation
+
+http://derekchiang.github.io/rust-hyperdex/
+
 ## Examples
 
-You may find complete examples in [this repo](https://github.com/derekchiang/rust-hyperdex-examples/).  The [tests](src/test.rs) may also be worth a look.
+The [tests](src/test.rs) are worth a look.
