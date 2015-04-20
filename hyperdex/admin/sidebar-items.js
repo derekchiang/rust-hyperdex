@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Admin","A HyperDex Admin object, used for meta operations like creating and removing spaces."]]});

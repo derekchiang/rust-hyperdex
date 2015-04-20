@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Client","A HyperDex client, used for common operations like getting and putting objects."]]});

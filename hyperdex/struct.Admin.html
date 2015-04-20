@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Admin` struct in crate `hyperdex`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Admin">
+
+    <title>hyperdex::Admin - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='index.html'>hyperdex</a></p><script>window.sidebarCurrent = {name: 'Admin', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>hyperdex</a>::<wbr><a class='struct' href=''>Admin</a><wbr></span><span class='out-of-band'><span id='render-detail'>
+            <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
+        </span><a id='src-16565' href='../src/hyperdex/admin.rs.html#17-20'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Admin {
+    // some fields omitted
+}</pre><div class='docblock'><p>A HyperDex Admin object, used for meta operations like creating and removing spaces.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><a class='stability Unmarked' title='No stability level'></a><code>impl <a class='struct' href='../hyperdex/struct.Admin.html' title='hyperdex::Admin'>Admin</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.new' class='fnname'>new</a>(coordinator: <a class='enum' href='http://doc.rust-lang.org/nightly/std/net/addr/enum.SocketAddr.html' title='std::net::addr::SocketAddr'>SocketAddr</a>) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='../hyperdex/struct.Admin.html' title='hyperdex::Admin'>Admin</a>, <a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>&gt;</code></h4>
+<h4 id='method.add_space' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.add_space' class='fnname'>add_space</a>(&amp;self, desc: &amp;<a href='http://doc.rust-lang.org/nightly/std/primitive.str.html'>str</a>) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;</code></h4>
+<h4 id='method.async_add_space' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.async_add_space' class='fnname'>async_add_space</a>(&amp;self, desc: &amp;<a href='http://doc.rust-lang.org/nightly/std/primitive.str.html'>str</a>) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/future/struct.Future.html' title='std::sync::future::Future'>Future</a>&lt;<a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;&gt;</code></h4>
+<h4 id='method.remove_space' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.remove_space' class='fnname'>remove_space</a>(&amp;self, desc: &amp;<a href='http://doc.rust-lang.org/nightly/std/primitive.str.html'>str</a>) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;</code></h4>
+<h4 id='method.async_remove_space' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.async_remove_space' class='fnname'>async_remove_space</a>(&amp;self, desc: &amp;<a href='http://doc.rust-lang.org/nightly/std/primitive.str.html'>str</a>) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/future/struct.Future.html' title='std::sync::future::Future'>Future</a>&lt;<a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;&gt;</code></h4>
+<h4 id='method.dump_config' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.dump_config' class='fnname'>dump_config</a>(&amp;self) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;</code></h4>
+<h4 id='method.async_dump_config' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.async_dump_config' class='fnname'>async_dump_config</a>(&amp;self) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/future/struct.Future.html' title='std::sync::future::Future'>Future</a>&lt;<a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;&gt;</code></h4>
+<h4 id='method.list_spaces' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.list_spaces' class='fnname'>list_spaces</a>(&amp;self) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;</code></h4>
+<h4 id='method.async_list_spaces' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.async_list_spaces' class='fnname'>async_list_spaces</a>(&amp;self) -&gt; <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/future/struct.Future.html' title='std::sync::future::Future'>Future</a>&lt;<a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='http://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;&gt;</code></h4>
+<h4 id='method.hyperdex_admin_mv_space' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.hyperdex_admin_mv_space' class='fnname'>hyperdex_admin_mv_space</a>&lt;S, T&gt;(&amp;self, source: S, target: T) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt; <span class='where'>where S: ToCStr, T: ToCStr</span></code></h4>
+<h4 id='method.hyperdex_admin_add_index' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.hyperdex_admin_add_index' class='fnname'>hyperdex_admin_add_index</a>&lt;S, A&gt;(&amp;self, space: S, attribute: A) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt; <span class='where'>where S: ToCStr, A: ToCStr</span></code></h4>
+<h4 id='method.hyperdex_admin_rm_index' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.hyperdex_admin_rm_index' class='fnname'>hyperdex_admin_rm_index</a>&lt;S, A&gt;(&amp;self, idx: <a href='http://doc.rust-lang.org/nightly/std/primitive.u64.html'>u64</a>) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='../hyperdex/struct.HyperError.html' title='hyperdex::HyperError'>HyperError</a>&gt;</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "hyperdex";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script async src="../search-index.js"></script>
+</body>
+</html>
