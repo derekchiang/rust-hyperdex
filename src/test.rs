@@ -77,8 +77,8 @@ fn test_add_and_get_objects() {
                 Err(err) => panic!(err),
             };
 
-            assert_eq!(first, "Derek".to_bytes());
-            assert_eq!(last, "Chiang".to_bytes());
+            assert_eq!(first, "Derek".as_bytes());
+            assert_eq!(last, "Chiang".as_bytes());
         },
         Err(err) => panic!(err),
     }
