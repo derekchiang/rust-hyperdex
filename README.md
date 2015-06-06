@@ -1,10 +1,12 @@
-# rust-hyperdex [![Build Status](https://travis-ci.org/derekchiang/rust-hyperdex.svg?branch=master)](https://travis-ci.org/derekchiang/rust-hyperdex)
+# rust-hyperdex
 
 Rust binding for [HyperDex](http://hyperdex.org/).
 
 ## Prerequisites
 
-You need to install the HyperDex development files.  Assuming you have added HyperDex's PPA by following [these instructions](http://hyperdex.org/download/), you may simply install the following packages:
+This binding makes use of several experimental features including macros, which are only available on Rust Beta and Rust Nightly.  [Refer to here for installing Rust](http://www.rust-lang.org/install.html).
+
+To compile the binding, you need to install the HyperDex development files.  Assuming you are using Ubuntu and you have added HyperDex's PPA by following [these instructions](http://hyperdex.org/download/), you may simply install the following packages:
 
     sudo apt-get install libhyperdex-dev libhyperdex-client-dev libhyperdex-admin-dev
 
@@ -22,3 +24,17 @@ http://derekchiang.github.io/rust-hyperdex/
 ## Examples
 
 The [tests](src/test.rs) are worth a look.
+
+## Testing
+
+Most of the tests are included in the HyperDex repo itself.  The repo also includes a few test cases.
+
+Before you run the tests, you need to start the HyperDex coordinator at `127.0.0.1:1982` and also start a daemon.
+
+Then, set the following environment variable to make the tests run in series:
+
+    export RUST_TEST_THREADS=1
+
+Now you may run the tests:
+
+    cargo test --lib

@@ -1,6 +1,5 @@
 use std::mem::transmute;
 use std::net::SocketAddr;
-use std::time::duration::Duration;
 use std::sync::Future;
 use std::thunk::Thunk;
 use std::sync::mpsc::{channel, Sender, Receiver};

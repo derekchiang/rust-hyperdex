@@ -14,7 +14,6 @@ use std::sync::atomic;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Future;
-use std::time::duration::Duration;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
