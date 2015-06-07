@@ -28,5 +28,7 @@ keywords = ["database", "bindings", "binding", "NoSQL", "HyperDex"]
 license = "BSD-2-Clause"
 
 [dependencies]
+libc = "*"
 num_cpus = "*"
-errno = "*"
+errno = "0.1.2"
+rustc-serialize = "0.3.15"

@@ -9,6 +9,7 @@
 #![feature(convert)]
 
 extern crate libc;
+extern crate rustc_serialize;
 
 pub use common::HyperError;
 pub use client::{Client};

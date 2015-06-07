@@ -6,6 +6,9 @@ use std::iter::FromIterator;
 use std::cmp::Ordering;
 use std::ptr::Unique;
 use std::hash;
+use std::fmt::Debug;
+
+use rustc_serialize::json::Json;
 
 use libc::*;
 
@@ -45,6 +48,8 @@ pub enum HyperValue {
     HyperMapFloatString(HashMap<F64, Vec<u8>>),
     HyperMapFloatInt(HashMap<F64, i64>),
     HyperMapFloatFloat(HashMap<F64, f64>),
+
+    HyperDocument(Json)
 }
 
 pub struct SearchState {
@@ -174,6 +179,8 @@ from_hypervalue_impl!(HashMap<i64, f64>, HyperMapIntFloat);
 from_hypervalue_impl!(HashMap<F64, Vec<u8>>, HyperMapFloatString);
 from_hypervalue_impl!(HashMap<F64, i64>, HyperMapFloatInt);
 from_hypervalue_impl!(HashMap<F64, f64>, HyperMapFloatFloat);
+
+from_hypervalue_impl!(Json, HyperDocument);
 
 /// A HyperDex object.
 ///
@@ -434,6 +441,12 @@ impl ToHyperValue for HashMap<F64, i64> {
 impl ToHyperValue for HashMap<F64, f64> {
     fn to_hyper(self) -> HyperValue {
         HyperMapFloatFloat(self)
+    }
+}
+
+impl ToHyperValue for Json {
+    fn to_hyper(self) -> HyperValue {
+        HyperDocument(self)
     }
 }
 

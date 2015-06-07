@@ -20,6 +20,8 @@ use std::thread;
 
 use libc::*;
 
+use rustc_serialize::json::Json;
+
 use common::*;
 use hyperdex::*;
 use hyperdex_client::*;
@@ -348,6 +350,11 @@ unsafe fn build_hyperobject(c_attrs: *const Struct_hyperdex_client_attribute, c_
                     }
                 }
                 attrs.insert(name, map);
+            },
+
+            HYPERDATATYPE_DOCUMENT => {
+                let s = String::from_raw_parts(attr.value as *mut u8, (attr.value_sz - 1) as usize, (attr.value_sz - 1) as usize);
+                attrs.insert(name, Json::from_str(s.as_str()).unwrap());
             },
 
             _ => { return Err(format!("Unrecognized datatype: {}", attr.datatype)); }
@@ -754,6 +761,17 @@ unsafe fn convert_type(arena: *mut Struct_hyperdex_ds_arena, val: HyperValue) ->
                 }
             }
         },
+        HyperDocument(doc) => {
+            let s = format!("{}", doc);
+            let slen = s.len() as u64;
+            let cstr = s.to_c_str();
+            if hyperdex_ds_copy_string(arena, cstr.as_ptr() as *const i8, slen,
+                                       &mut status, &mut cs, &mut sz) < 0 {
+                mem_err
+            } else {
+                Ok((cs, sz, HYPERDATATYPE_DOCUMENT))
+            }
+        }
     }
 }
 

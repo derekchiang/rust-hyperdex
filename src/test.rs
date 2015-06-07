@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use rustc_serialize::json::Json;
+use rustc_serialize::json::ToJson;
+
 use super::*;
 use super::HyperValue::*;
 use super::HyperPredicateType::*;
@@ -17,6 +20,47 @@ attributes first, last, int age
 subspace first, last
 create 2 partitions
 tolerate 2 failures";
+
+#[test]
+fn test_documents() {
+    let admin = Admin::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
+    match admin.add_space("
+space profiles
+key username
+attributes
+document profile") {
+        Ok(()) => (),
+        Err(err) => panic!(format!("{}", err)),
+    };
+    let space = "profiles";
+
+    let mut client = Client::new(FromStr::from_str(coord_addr).unwrap()).unwrap();
+
+    let mut profile: HashMap<String, isize> = HashMap::new();
+    profile.insert("name".to_string(), 123);
+    profile.insert("age".to_string(), 456);
+
+    let mut obj = HyperObject::new();
+    obj.insert("profile", profile.to_json());
+
+    match client.put(space, "me", obj) {
+        Ok(()) => (),
+        Err(err) => panic!(format!("{}", err)),
+    }
+
+    match client.get(space, "me") {
+        Ok(mut obj) => {
+            let profile: Json = match obj.get("profile") {
+                Ok(s) => s,
+                Err(err) => panic!(err),
+            };
+
+            assert_eq!(profile, Json::from_str("{\"name\": 123, \"age\": 456}").unwrap());
+        },
+        Err(err) => panic!(format!("{}", err)),
+    }
+    admin.remove_space(space).unwrap();
+}
 
 #[test]
 fn test_add_and_rm_space() {
@@ -134,7 +178,6 @@ fn test_add_and_search_objects() {
         let name: Vec<u8> = obj.get("first").unwrap();
         let age: i64 = obj.get("age").unwrap();
         assert!(age <= 25);
-        println!("{:?} is {} years old", name, age);
     }
 
     admin.remove_space(space_name).unwrap();
