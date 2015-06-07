@@ -17,6 +17,10 @@ Using [Cargo](https://crates.io/), the Rust package manager, it's as easy as add
     [dependencies]
     hyperdex = "*"
 
+Then, to use the crate in your code, add this line:
+
+    #[macro_use] extern crate hyperdex;  // use #[macro_use] if you want to use the macros
+
 ## Documentation
 
 http://derekchiang.github.io/rust-hyperdex/
@@ -24,6 +28,8 @@ http://derekchiang.github.io/rust-hyperdex/
 ## Examples
 
 The [tests](src/test.rs) are worth a look.
+
+Here is a simple application using the binding: https://github.com/derekchiang/rust-hyperdex-example
 
 ## Testing
 
