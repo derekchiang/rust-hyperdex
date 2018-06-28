@@ -29,6 +29,6 @@ license = "BSD-2-Clause"
 
 [dependencies]
 libc = "*"
-num_cpus = "*"
+num_cpus = "1.8"
 errno = "0.1.2"
 rustc-serialize = "0.3.15"
